@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3ba3e0">
+<meta name="description" content="Monthly maneviyat competition across the five houses.">
+<title>Maneviyat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<!-- ============================ BOOT ============================ -->
+<div id="boot" class="boot"><div class="spinner"></div></div>
+
+
+<!-- ======================= 1. PICK A HOUSE ======================= -->
+<section id="screenHouse" class="screen" hidden>
+  <div class="screen-inner">
+    <div class="welcome">
+      <div class="welcome-mark">☾</div>
+      <h1>Maneviyat</h1>
+      <p class="lede">Monthly competition across the five houses</p>
+    </div>
+    <h2 class="step-label">Which house are you in?</h2>
+    <div class="house-grid" id="houseGrid"></div>
+    <p class="setup-link">
+      First time? <button type="button" id="openSetup">Set up the houses</button>
+    </p>
+  </div>
+</section>
+
+
+<!-- ====================== 1b. FIRST-TIME SETUP ==================== -->
+<section id="screenSetup" class="screen" hidden>
+  <div class="screen-inner narrow">
+    <button class="backbtn" id="setupBack">&larr; Back</button>
+
+    <!-- gate -->
+    <div class="gate-card" id="setupGate">
+      <div class="gate-avatar">⚙</div>
+      <h1 class="screen-title">First-time setup</h1>
+      <p class="lede">Run this once, then never again.</p>
+      <form id="setupGateForm" class="gate-form">
+        <label>Ev Abi password
+          <input type="password" id="setupGatePw" autocomplete="off" required
+                 placeholder="The Ev Abi password">
+          <small class="hint">Only someone with this can create the house logins.</small>
+        </label>
+        <button class="btn btn-primary btn-block" type="submit">Continue</button>
+        <p class="errmsg" id="setupGateError" hidden></p>
+      </form>
+    </div>
+
+    <!-- passwords -->
+    <div class="gate-card" id="setupForm" hidden>
+      <h1 class="screen-title">Set the house passwords</h1>
+      <p class="lede">Each house gets its own. At least 6 characters.</p>
+      <form id="setupPwForm" class="gate-form">
+        <div id="setupFields"></div>
+        <label>New Ev Abi password
+          <input type="password" id="setupEvAbiPw" autocomplete="off" minlength="4"
+                 required placeholder="Replaces the one in the source">
+          <small class="hint">Required. The starting one is readable by anyone
+            who views the page source, so it cannot be kept.</small>
+        </label>
+        <button class="btn btn-primary btn-block" type="submit" id="setupRun">
+          Create the five house logins
+        </button>
+        <p class="errmsg" id="setupError" hidden></p>
+      </form>
+    </div>
+
+    <!-- results -->
+    <div class="gate-card" id="setupDone" hidden>
+      <div class="gate-avatar">✓</div>
+      <h1 class="screen-title">Setup complete</h1>
+      <p class="lede">Give each Ev Abi their house password.</p>
+      <div id="setupResults" class="setup-results"></div>
+      <button class="btn btn-primary btn-block" id="setupFinish">Go to the app</button>
+    </div>
+  </div>
+</section>
+
+
+<!-- ======================= 2. PICK YOUR NAME ===================== -->
+<section id="screenMember" class="screen" hidden>
+  <div class="screen-inner">
+    <button class="backbtn" data-back="house">&larr; Back</button>
+    <h1 class="screen-title" id="memberHouseName"></h1>
+    <p class="lede" id="memberHouseAddress"></p>
+    <h2 class="step-label">Who are you?</h2>
+    <div class="member-grid" id="memberGrid"></div>
+  </div>
+</section>
+
+
+<!-- ========================= 3. PASSWORD ========================= -->
+<section id="screenGate" class="screen" hidden>
+  <div class="screen-inner narrow">
+    <button class="backbtn" data-back="member">&larr; Back</button>
+    <div class="gate-card">
+      <div class="gate-avatar" id="gateAvatar">··</div>
+      <h1 class="screen-title" id="gateName"></h1>
+      <p class="lede" id="gateHouse"></p>
+
+      <form id="gateForm" class="gate-form">
+        <label>House password
+          <input type="password" id="gateHousePw" autocomplete="current-password"
+                 required placeholder="Ask your Ev Abi">
+        </label>
+
+        <label id="gateEvAbiWrap" hidden>Ev Abi password
+          <input type="password" id="gateEvAbiPw" autocomplete="off"
+                 placeholder="Proves you're the Ev Abi">
+          <small class="hint">You picked the Ev Abi, so this one is needed too.</small>
+        </label>
+
+        <button class="btn btn-primary btn-block" type="submit" id="gateSubmit">Enter</button>
+        <p class="errmsg" id="gateError" hidden></p>
+      </form>
+    </div>
+  </div>
+</section>
+
+
+<!-- =========================== 4. APP =========================== -->
+<div id="screenMain" hidden>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span class="brand-mark">☾</span><span id="topHouse"></span></div>
+      <div class="topbar-right">
+        <span class="month-pill" id="monthPill"></span>
+        <button class="iconbtn" id="themeBtn" aria-label="Toggle dark mode" title="Toggle dark mode">◐</button>
+        <button class="iconbtn" id="signOutBtn" aria-label="Sign out" title="Sign out">⏻</button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabbar" id="tabbar" role="tablist">
+    <button class="tab is-active" data-tab="me"    role="tab"><span class="tab-ico">◍</span>Me</button>
+    <button class="tab"           data-tab="house" role="tab"><span class="tab-ico">⌂</span>House</button>
+    <button class="tab"           data-tab="rank"  role="tab"><span class="tab-ico">✦</span>Standings</button>
+    <button class="tab" id="tabSettings" data-tab="settings" role="tab" hidden><span class="tab-ico">⚙</span>Ev Abi</button>
+  </nav>
+
+  <main class="page">
+    <div class="panel" id="panel-me"></div>
+    <div class="panel" id="panel-house" hidden></div>
+    <div class="panel" id="panel-rank" hidden></div>
+    <div class="panel" id="panel-settings" hidden></div>
+  </main>
+
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="src/app.js"></script>
+</body>
+</html>

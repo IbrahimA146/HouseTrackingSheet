@@ -1,0 +1,111 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------------------
+// Paste this whole file into:
+//   Firebase console -> Firestore Database -> Rules -> Publish
+//
+// HOW THE LOCK WORKS
+//   Each house signs in as one account, risale@maneviyat.app and so on, whose
+//   password is the house password. Firebase checks that password on its own
+//   servers. These rules then read the signed-in account's address to decide
+//   which house you are, so a house can only ever touch its own entries.
+//
+//   Which housemate you claim to be inside your own house is NOT enforced
+//   here. Everyone in a house shares its password, so the app trusts
+//   housemates with each other. That is a deliberate choice, not an oversight.
+// ---------------------------------------------------------------------------
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // "risale@maneviyat.app" -> "risale"
+    function myHouse() {
+      return request.auth.token.email.split('@')[0];
+    }
+
+    // Only these five accounts count. Email/password sign-up has to stay open
+    // for the in-app setup wizard to create the houses, which means a stranger
+    // could register some other address. This check makes such an account
+    // worthless, since it matches no house.
+    function isHouseAccount() {
+      return myHouse() in ['risale', 'grand', 'prestige', 'pirlanta', 'gurbet'];
+    }
+
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && isHouseAccount();
+    }
+
+    function validCategory(c) {
+      return c in ['books', 'quran', 'cevsen'];
+    }
+
+    // ------------------------------------------------------------- entries --
+    // Private to one house. This is the wall that stops House A reading
+    // House B's numbers.
+    match /entries/{entryId} {
+
+      allow read: if signedIn() && resource.data.houseId == myHouse();
+
+      allow create: if signedIn()
+        && request.resource.data.houseId == myHouse()
+        && request.resource.data.member is string
+        && request.resource.data.member.size() > 0
+        && request.resource.data.member.size() < 60
+        && request.resource.data.month is string
+        && request.resource.data.month.matches('[0-9]{4}-[0-9]{2}')
+        && validCategory(request.resource.data.category)
+        && request.resource.data.amount is int
+        && request.resource.data.amount > 0
+        && request.resource.data.amount <= 10000
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 60;
+
+      // Append-only. A wrong number is deleted and re-added, never silently
+      // rewritten, so the history stays honest.
+      allow update: if false;
+
+      allow delete: if signedIn() && resource.data.houseId == myHouse();
+    }
+
+    // ----------------------------------------------------------- standings --
+    // Totals only, no names and no per-member numbers. Every house can read
+    // these, which is what makes the 1-to-5 ladder possible without exposing
+    // anybody's individual progress. Each house writes only its own row.
+    match /standings/{docId} {
+
+      allow read: if signedIn();
+
+      allow write: if signedIn()
+        && request.resource.data.houseId == myHouse()
+        && request.resource.data.month is string
+        && request.resource.data.month.matches('[0-9]{4}-[0-9]{2}')
+        // The id must be "<month>_<houseId>", so a house can't squat on
+        // another house's row.
+        && docId == request.resource.data.month + '_' + myHouse()
+        && request.resource.data.totals.keys().hasOnly(['books', 'quran', 'cevsen'])
+        && request.resource.data.qualified is bool;
+
+      allow delete: if false;
+    }
+
+    // ---------------------------------------------------------------- gate --
+    // Holds the salted hash of the Ev Abi password. Readable so the app can
+    // check a typed password against it.
+    //
+    // NOTE: any signed-in house can overwrite this, because these rules have no
+    // way to tell an Ev Abi from a housemate, since they share one password.
+    // The Ev Abi password is a shared secret among the five Ev Abis, not a
+    // defence against your own housemates.
+    match /config/{docId} {
+      allow read:  if signedIn();
+      allow write: if signedIn();
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
