@@ -204,13 +204,36 @@ input:focus { outline: 2.5px solid var(--accent); outline-offset: -1px; border-c
   background: var(--accent-soft); padding: 4px 9px; border-radius: 20px;
 }
 
+.demo-note {
+  margin-top: 22px; padding: 14px 16px; border-radius: 13px;
+  background: var(--warn-soft); color: var(--warn);
+  font-size: .85rem; line-height: 1.5;
+}
+.demo-note code {
+  background: rgba(0,0,0,.08); padding: 1px 6px; border-radius: 5px;
+  font-size: .95em; font-weight: 700;
+}
+.banner {
+  background: var(--warn-soft); color: var(--warn); text-align: center;
+  padding: 9px 16px; font-size: .82rem; font-weight: 600;
+}
+
 /* first-time setup */
 .setup-link { text-align: center; margin-top: 22px; color: var(--text-dim); font-size: .85rem; }
 .setup-link button {
   background: none; border: 0; font: inherit; font-weight: 650;
   color: var(--accent-deep); cursor: pointer; text-decoration: underline; padding: 4px;
 }
-#setupFields { display: grid; gap: 13px; }
+.house-badge { font-size: .95rem; letter-spacing: -.02em; }
+#setupFields { display: grid; gap: 15px; }
+.setup-field-head { display: flex; align-items: center; gap: 10px; }
+.setup-field-code {
+  min-width: 42px; padding: 5px 7px; border-radius: 8px; text-align: center;
+  background: var(--accent-soft); color: var(--accent-deep);
+  font-weight: 700; font-size: .78rem;
+}
+.setup-field-name { display: block; color: var(--text); font-weight: 650; font-size: .92rem; }
+.setup-field-addr { display: block; color: var(--text-dim); font-weight: 400; font-size: .76rem; }
 .setup-results { display: grid; gap: 8px; margin: 18px 0 20px; text-align: left; }
 .setup-row {
   display: flex; align-items: flex-start; gap: 10px;

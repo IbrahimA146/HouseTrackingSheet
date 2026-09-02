@@ -93,6 +93,32 @@ const demo = {
 
 const demoNotify = () => demo.listeners.forEach(fn => fn());
 
+// Demo mode has no server, so anything the setup wizard sets would vanish on
+// reload. Keeping it in localStorage makes demo mode behave like the real
+// thing while you are still trying the app out.
+const DEMO_KEY = "maneviyat-demo";
+
+function demoSave() {
+  try {
+    localStorage.setItem(DEMO_KEY, JSON.stringify({
+      housePasswords: demo.housePasswords,
+      evAbiHash: demo.evAbiHash,
+      entries: demo.entries
+    }));
+  } catch { /* storage blocked; demo state just won't survive a reload */ }
+}
+
+(function demoLoad() {
+  try {
+    const raw = localStorage.getItem(DEMO_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (saved.housePasswords) Object.assign(demo.housePasswords, saved.housePasswords);
+    if (saved.evAbiHash) demo.evAbiHash = saved.evAbiHash;
+    if (Array.isArray(saved.entries)) demo.entries = saved.entries;
+  } catch { /* unreadable, start fresh */ }
+})();
+
 // ===========================================================================
 // Session
 // ===========================================================================
@@ -221,6 +247,7 @@ export async function addEntry({ houseId, member, month, category, amount, note 
   const row = { houseId, member, month, category, amount, note: note || "" };
   if (isDemo) {
     demo.entries.push({ ...row, id: `d${Date.now()}`, createdAt: Date.now() });
+    demoSave();
     demoNotify();
     return;
   }
@@ -231,6 +258,7 @@ export async function addEntry({ houseId, member, month, category, amount, note 
 export async function deleteEntry(id) {
   if (isDemo) {
     demo.entries = demo.entries.filter(e => e.id !== id);
+    demoSave();
     demoNotify();
     return;
   }
@@ -336,6 +364,7 @@ export async function initializeHouses(passwords, newEvAbiPassword) {
     }
     if (newEvAbiPassword) demo.evAbiHash = await hashPassword(newEvAbiPassword);
     demo.initialized = true;
+    demoSave();
     return results;
   }
 
@@ -413,6 +442,7 @@ export async function setHousePassword(newPassword) {
   }
   if (isDemo) {
     demo.housePasswords[getSession().houseId] = newPassword;
+    demoSave();
     return;
   }
   const f = await loadFirebase();
@@ -429,7 +459,7 @@ export async function setEvAbiPassword(newPassword) {
     throw new StoreError("weak", "Password must be at least 4 characters.");
   }
   const hash = await hashPassword(newPassword);
-  if (isDemo) { demo.evAbiHash = hash; return; }
+  if (isDemo) { demo.evAbiHash = hash; demoSave(); return; }
   const f = await loadFirebase();
   await f.setDoc(f.doc(f.db, "config", "gate"), { evAbiHash: hash }, { merge: true });
 }

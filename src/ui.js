@@ -18,7 +18,7 @@ const ordinal = n => ["", "st", "nd", "rd"][n] || "th";
 export function houseCards(houses) {
   return houses.map(h => `
     <button class="house-card" data-house="${h.id}">
-      <span class="house-badge">${initials(h.name)}</span>
+      <span class="house-badge">${esc(h.code || initials(h.name))}</span>
       <span class="house-card-body">
         <span class="house-card-name">${esc(h.name)}</span>
         <span class="house-card-meta">${esc(h.address)} · ${h.members.length} members</span>

@@ -36,35 +36,35 @@ export const CAT_KEYS = CATEGORIES.map(c => c.key);
 // anything, or that history stops lining up.
 export const HOUSES = [
   {
-    id: "risale", name: "Risale Regents", address: "Regents 26th (523) · 5x2",
+    id: "risale", code: "RR", name: "Risale Regents", address: "Regents 26th (523) · 5x2",
     members: [
       "Ibrahim Aksoy", "Arif Camci", "Alperen Aydin",
       "Erdem Dogan", "Ihsan Yildirim", "Ahmet Karabay"
     ]
   },
   {
-    id: "grand", name: "Grand Regents", address: "Regents 26th · 5x2",
+    id: "grand", code: "GR", name: "Grand Regents", address: "Regents 26th · 5x2",
     members: [
       "Emre Tunca", "Serdar Can Cakin", "Enes Gurbuz",
       "Fahreddin Ali Pala", "Cemal Taban", "Abdulaziz Imanaliev"
     ]
   },
   {
-    id: "prestige", name: "Prestige Pearl", address: "Pearl 608 · 4x2",
+    id: "prestige", code: "PRP", name: "Prestige Pearl", address: "Pearl 608 · 4x2",
     members: [
       "Nihat Topcu", "Mehmet Bisen", "Adil Ulu",
       "Ali Guvener", "Alper Ozbey", "Erkam Said Ekici"
     ]
   },
   {
-    id: "pirlanta", name: "Pirlanta Pearl", address: "Pearl 603 · 4x2",
+    id: "pirlanta", code: "PIP", name: "Pirlanta Pearl", address: "Pearl 603 · 4x2",
     members: [
       "Bera Dogan", "Yusuf Koroglu", "Esad Gürbüz",
       "Efe Gürbüz", "Hakan Ince", "Mehmet Canbegi"
     ]
   },
   {
-    id: "gurbet", name: "Gurbet Galileo", address: "Galileo 408 · 3x2",
+    id: "gurbet", code: "GG", name: "Gurbet Galileo", address: "Galileo 408 · 3x2",
     members: [
       "Selim Gurkas", "Ramiz Aksoy", "Yahya Güvercin",
       "Omer Dokan", "Ahmed Yakub Sarihan"

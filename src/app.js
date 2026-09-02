@@ -64,6 +64,13 @@ $("themeBtn").addEventListener("click", () => {
 // =========================================================== 1. HOUSES ====
 $("houseGrid").innerHTML = ui.houseCards(HOUSES);
 
+// Say so, loudly. Without this there is no way to tell why a real house
+// password is being refused.
+if (store.isDemo) {
+  $("demoNote").hidden = false;
+  $("demoBanner").hidden = false;
+}
+
 $("houseGrid").addEventListener("click", e => {
   const btn = e.target.closest("[data-house]");
   if (!btn) return;
@@ -100,11 +107,18 @@ $("setupGateForm").addEventListener("submit", async e => {
   }
 
   $("setupFields").innerHTML = HOUSES.map(h => `
-    <label>${h.name}
+    <label class="setup-field">
+      <span class="setup-field-head">
+        <span class="setup-field-code">${ui.esc(h.code)}</span>
+        <span>
+          <span class="setup-field-name">${ui.esc(h.name)}</span>
+          <span class="setup-field-addr">${ui.esc(h.address)}</span>
+        </span>
+      </span>
       <input type="text" class="setup-pw" data-house="${h.id}"
              minlength="${MIN_PASSWORD_LENGTH}" required autocomplete="off"
              spellcheck="false" autocapitalize="off"
-             placeholder="Password for ${h.name}">
+             placeholder="Password for ${ui.esc(h.name)}">
     </label>`).join("");
   $("setupGate").hidden = true;
   $("setupForm").hidden = false;

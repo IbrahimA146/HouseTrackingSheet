@@ -27,6 +27,11 @@
     </div>
     <h2 class="step-label">Which house are you in?</h2>
     <div class="house-grid" id="houseGrid"></div>
+    <p class="demo-note" id="demoNote" hidden>
+      <strong>Demo mode.</strong> Firebase is not connected yet, so nothing is
+      saved and the house password for every house is <code>demo</code>.
+      Your real passwords start working once Firebase is set up.
+    </p>
     <p class="setup-link">
       First time? <button type="button" id="openSetup">Set up the houses</button>
     </p>
@@ -140,6 +145,8 @@
       </div>
     </div>
   </header>
+
+  <div class="banner" id="demoBanner" hidden>Demo mode. Nothing here is saved.</div>
 
   <nav class="tabbar" id="tabbar" role="tablist">
     <button class="tab is-active" data-tab="me"    role="tab"><span class="tab-ico">◍</span>Me</button>
