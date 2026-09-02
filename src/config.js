@@ -7,12 +7,12 @@
 // app runs on local demo data so you can try it without any setup.
 // These keys are public by design; firestore.rules is what protects the data.
 export const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY",
-  authDomain: "PASTE_YOUR_PROJECT.firebaseapp.com",
-  projectId: "PASTE_YOUR_PROJECT_ID",
-  storageBucket: "PASTE_YOUR_PROJECT.appspot.com",
-  messagingSenderId: "PASTE_SENDER_ID",
-  appId: "PASTE_APP_ID"
+  apiKey: "AIzaSyB093OQYb4v5eqKdzts8Fg2MmWAe6v4EPM",
+  authDomain: "maneviyat-ad697.firebaseapp.com",
+  projectId: "maneviyat-ad697",
+  storageBucket: "maneviyat-ad697.firebasestorage.app",
+  messagingSenderId: "441915750035",
+  appId: "1:441915750035:web:0b5c5c3735559ab84fff66"
 };
 
 // --- The competition ------------------------------------------------------
