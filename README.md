@@ -8,18 +8,20 @@ the house password, and you're in.
 
 ---
 
-## Try it right now
+## Live
 
-While `src/config.js` still holds placeholder Firebase keys, the app runs on
-**demo data** for all 29 members, with no setup at all. Serve the folder and
-open it:
+https://ibrahima146.github.io/HouseTrackingSheet/
+
+To run it locally, serve the folder over HTTP. ES modules do not work from
+`file://`:
 
 ```bash
 python -m http.server 8765
 ```
 
-Every house starts at **zero**, exactly as it will on the 1st of the month.
-Sign in with the real starting passwords below, or `demo` for any house.
+If `src/config.js` ever goes back to placeholder keys, the app falls into
+**demo mode**: an orange notice appears, nothing is saved, and every house
+password becomes `demo`. That is the signal Firebase is not connected.
 
 ---
 
@@ -46,19 +48,19 @@ second password on the same screen. Get it wrong and you don't get in at all.
 
 | | Per house, per month |
 |---|---|
-| Religious book reading | **400** pages |
-| Qur'an | **60** |
-| Cevşen | **100** bab |
+| Religious book reading | **500** pages |
+| Qur'an | **80** pages |
+| Cevşen | **300** bab |
 
 - Every member must personally reach **10% of each threshold**, which is
-  **40 pages, 6 Qur'an, 10 bab**.
+  **50 book pages, 8 Qur'an pages, 30 bab**.
 - A house **qualifies** only if it clears all three thresholds **and** every
   member cleared his floor. One man short in one category and the whole house is
   out, however good the totals look.
 - Every qualified house gets the automatic reward. The qualified house with the
   highest **score** takes the extra one.
-- **Score** = the average of the three completion percentages. 500/400 pages,
-  60/60 Qur'an, 100/100 bab → `(125 + 100 + 100) / 3 = 108.3`.
+- **Score** = the average of the three completion percentages. 625/500 book
+  pages, 80/80 Qur'an, 300/300 bab → `(125 + 100 + 100) / 3 = 108.3`.
 
 These are fixed in `src/config.js`. There is no admin screen for them, by design.
 
@@ -146,14 +148,13 @@ and a house that already exists is reported as such rather than failing.
 
 ### 6. Hand out the passwords
 
-Give each Ev Abi their house password and the new Ev Abi password.
+Give each Ev Abi their house password and the new Ev Abi password. They pass
+the house password to their housemates and can change it any time from the
+Ev Abi tab.
 
 > **Never write the passwords into a file in this repository.** Everything here
 > is downloaded by every visitor's browser, and GitHub Pages serves this README
 > too. Send them by message instead.
- They pass the
-house password to their housemates and can change it any time from the Ev Abi
-tab.
 
 ### 7. Optional: close the door behind you
 

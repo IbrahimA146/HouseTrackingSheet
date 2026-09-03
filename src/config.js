@@ -17,15 +17,15 @@ export const firebaseConfig = {
 
 // --- The competition ------------------------------------------------------
 // Fixed. Every house must reach all three.
-export const THRESHOLDS = { books: 400, quran: 60, cevsen: 100 };
+export const THRESHOLDS = { books: 500, quran: 80, cevsen: 300 };
 
 // Every member must personally reach this share of each threshold,
-// i.e. 40 pages, 6 Qur'an, 10 bab. Miss one and the whole house is out.
+// i.e. 50 book pages, 8 Qur'an pages, 30 bab. Miss one and the house is out.
 export const MIN_SHARE = 0.10;
 
 export const CATEGORIES = [
   { key: "books",  label: "Book pages", short: "Books",  hint: "Pages of religious books read" },
-  { key: "quran",  label: "Qur’an",     short: "Qur’an", hint: "Qur’an read this month" },
+  { key: "quran",  label: "Qur’an",     short: "Qur’an", hint: "Pages of Qur’an read this month" },
   { key: "cevsen", label: "Cevşen",     short: "Cevşen", hint: "Bab of Cevşen read" }
 ];
 export const CAT_KEYS = CATEGORIES.map(c => c.key);
