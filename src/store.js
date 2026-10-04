@@ -25,7 +25,7 @@
 
 import {
   firebaseConfig, HOUSES, AUTH_DOMAIN, PASSWORD_SUFFIX, MIN_PASSWORD_LENGTH,
-  DEFAULT_EV_ABI_PASSWORD, DEMO_HOUSE_PASSWORD
+  BOOTSTRAP_EV_ABI_PASSWORD, DEMO_HOUSE_PASSWORD
 } from "./config.js";
 import { hashPassword, verifyPassword } from "./crypto.js";
 import { houseStanding, scoreOf } from "./scoring.js";
@@ -183,8 +183,9 @@ export async function signInHouse(houseId, password) {
 export async function verifyEvAbi(password) {
   const stored = await loadEvAbiHash();
   if (stored) return verifyPassword(password, stored);
-  // Nothing stored yet, so fall back to the default from config.js.
-  return password === DEFAULT_EV_ABI_PASSWORD;
+  // No hash stored yet. Only a non-empty bootstrap password can get through,
+  // and that is empty unless someone is deliberately setting up a new project.
+  return BOOTSTRAP_EV_ABI_PASSWORD !== "" && password === BOOTSTRAP_EV_ABI_PASSWORD;
 }
 
 async function loadEvAbiHash() {
@@ -241,6 +242,27 @@ export function watchHouseEntries(houseId, month, cb) {
     }, err => console.error("entries listener:", err));
   });
   return () => { cancelled = true; stop(); };
+}
+
+/**
+ * Read one month's entries once, with no live listener. Used for months that
+ * have already closed, where nothing is going to change under you.
+ */
+export async function loadHouseEntries(houseId, month) {
+  if (isDemo) {
+    return demo.entries.filter(e => e.houseId === houseId && e.month === month);
+  }
+  const f = await loadFirebase();
+  const q = f.query(
+    f.collection(f.db, "entries"),
+    f.where("houseId", "==", houseId),
+    f.where("month", "==", month)
+  );
+  const snap = await f.getDocs(q);
+  return snap.docs.map(d => ({
+    id: d.id, ...d.data(),
+    createdAt: d.data().createdAt?.toMillis?.() ?? Date.now()
+  }));
 }
 
 export async function addEntry({ houseId, member, month, category, amount, note }) {

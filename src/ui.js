@@ -112,13 +112,30 @@ function entryRow(e, canDelete, withName = false) {
 }
 
 // ---------------------------------------------------------- "House" tab --
-export function renderHouse({ house, standing, month }) {
-  const days = daysLeftIn(month);
+export function renderHouse({ house, standing, viewMonth, months, isPast, evAbi, entries, loading }) {
+  const days = daysLeftIn(viewMonth);
   const st = standing.status;
+
+  const picker = `
+    <div class="monthbar">
+      <label class="monthbar-label" for="monthPick">Month</label>
+      <select id="monthPick">
+        ${months.map(m => `
+          <option value="${m.key}" ${m.key === viewMonth ? "selected" : ""}>
+            ${monthLabel(m.key)}${m.current ? " (now)" : ""}
+          </option>`).join("")}
+      </select>
+      ${isPast ? `<span class="chip">Closed</span>` : ""}
+    </div>`;
+
+  if (loading) {
+    return `<section class="card">${picker}<p class="empty">Loading ${monthLabel(viewMonth)}…</p></section>`;
+  }
 
   return `
     <section class="card">
-      <div class="card-head">
+      ${picker}
+      <div class="card-head" style="margin-top:14px">
         <div>
           <h2>${esc(house.name)}</h2>
           <p class="muted">${esc(house.address)} · ${standing.memberCount} members</p>
@@ -128,7 +145,10 @@ export function renderHouse({ house, standing, month }) {
       <div class="metrics">
         ${CATEGORIES.map(c => metric(c.short, standing.totals[c.key], THRESHOLDS[c.key], false)).join("")}
       </div>
-      <p class="fineprint" style="margin-top:12px">${esc(st.detail)} · ${days} day${days === 1 ? "" : "s"} left</p>
+      <p class="fineprint" style="margin-top:12px">
+        ${esc(st.detail)}${isPast ? ` · ${monthLabel(viewMonth)} is finished`
+                                  : ` · ${days} day${days === 1 ? "" : "s"} left`}
+      </p>
     </section>
 
     <section class="card">
@@ -140,6 +160,52 @@ export function renderHouse({ house, standing, month }) {
       </div>
       <div class="mem-list">
         ${standing.members.map(m => memberBlock(m, standing)).join("")}
+      </div>
+    </section>
+
+    ${isPast && evAbi ? correctionPanel(house, viewMonth, entries) : ""}`;
+}
+
+/**
+ * Ev Abi only, and only for a month that has already closed. A finished month
+ * is normally untouchable, but numbers do get logged wrong, and without this
+ * the only fix is editing the database by hand.
+ */
+function correctionPanel(house, viewMonth, entries) {
+  const rows = [...entries].sort((a, b) =>
+    a.member.localeCompare(b.member) || a.category.localeCompare(b.category));
+
+  return `
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Correct ${monthLabel(viewMonth)}</h2>
+          <p class="muted">Ev Abi only. Changing a closed month also updates who won it.</p>
+        </div>
+      </div>
+
+      <form id="fixForm" class="logform">
+        <div class="logrow logrow-fix">
+          <select id="fixMember">
+            ${house.members.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("")}
+          </select>
+          <select id="fixCat">
+            ${CATEGORIES.map(c => `<option value="${c.key}">${c.short}</option>`).join("")}
+          </select>
+          <input type="number" id="fixAmount" min="1" step="1" inputmode="numeric"
+                 placeholder="Amount" required>
+          <button class="btn btn-primary" type="submit">Add to ${monthLabel(viewMonth).split(" ")[0]}</button>
+        </div>
+        <p class="fineprint">
+          Entries are append-only, so correcting 20 to 30 means adding 10, or
+          deleting the wrong row below and adding a right one.
+        </p>
+      </form>
+
+      <div class="entries">
+        ${rows.length
+          ? rows.map(e => entryRow(e, true, true)).join("")
+          : `<p class="empty">Nothing was logged in ${monthLabel(viewMonth)}.</p>`}
       </div>
     </section>`;
 }

@@ -25,6 +25,10 @@ const state = {
   history: [],
   tab: "me",
   logCat: CATEGORIES[0].key,
+  // House tab can look back at a finished month. Null means "the live month".
+  viewMonth: null,
+  pastEntries: [],
+  pastLoading: false,
   unsub: []
 };
 
@@ -310,6 +314,72 @@ async function loadHistory() {
   }
 }
 
+/** The live month plus the last six, newest first. */
+function monthOptions() {
+  return [{ key: state.month, current: true }]
+    .concat(previousMonths(6, state.month).map(key => ({ key, current: false })));
+}
+
+async function loadPastMonth(month) {
+  state.viewMonth = month;
+  if (month === state.month) { state.pastEntries = []; render(); return; }
+
+  state.pastLoading = true;
+  render();
+  try {
+    state.pastEntries = await store.loadHouseEntries(state.houseId, month);
+  } catch (err) {
+    state.pastEntries = [];
+    toast(err.message || "Could not load that month.", true);
+  } finally {
+    state.pastLoading = false;
+    render();
+  }
+}
+
+document.addEventListener("change", e => {
+  if (e.target.id === "monthPick") loadPastMonth(e.target.value);
+});
+
+// Correcting a finished month. Republishes that month's standings afterwards,
+// so the winner on the Standings tab reflects the fix.
+async function refreshPastMonth() {
+  state.pastEntries = await store.loadHouseEntries(state.houseId, state.viewMonth);
+  const standing = houseStanding(houseById(state.houseId), state.pastEntries, state.viewMonth);
+  await store.publishStanding(state.viewMonth, standing).catch(err =>
+    console.error("could not republish standing:", err));
+  render();
+}
+
+document.addEventListener("submit", async e => {
+  if (e.target.id !== "fixForm") return;
+  e.preventDefault();
+
+  const amount = parseInt($("fixAmount").value, 10);
+  if (!Number.isFinite(amount) || amount <= 0) return toast("Enter a number above zero.", true);
+  if (amount > 10000) return toast("That looks like a typo.", true);
+
+  const btn = e.target.querySelector("button[type=submit]");
+  btn.disabled = true;
+  try {
+    await store.addEntry({
+      houseId: state.houseId,
+      member: $("fixMember").value,
+      month: state.viewMonth,
+      category: $("fixCat").value,
+      amount,
+      note: "correction"
+    });
+    $("fixAmount").value = "";
+    await refreshPastMonth();
+    toast("Correction saved");
+  } catch (err) {
+    toast(err.message || "Could not save.", true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // ------------------------------------------------------------------ tabs --
 $("tabbar").addEventListener("click", e => {
   const btn = e.target.closest("[data-tab]");
@@ -349,7 +419,19 @@ function render() {
   }
 
   if (state.tab === "house") {
-    $("panel-house").innerHTML = ui.renderHouse({ house, standing, month: state.month });
+    const viewMonth = state.viewMonth || state.month;
+    const isPast = viewMonth !== state.month;
+    const entries = isPast ? state.pastEntries : state.entries;
+    $("panel-house").innerHTML = ui.renderHouse({
+      house,
+      standing: isPast ? houseStanding(house, entries, viewMonth) : standing,
+      viewMonth,
+      months: monthOptions(),
+      isPast,
+      evAbi: state.evAbi,
+      entries,
+      loading: isPast && state.pastLoading
+    });
   }
 
   if (state.tab === "rank") {
@@ -409,14 +491,26 @@ document.addEventListener("submit", async e => {
 document.addEventListener("click", async e => {
   const del = e.target.closest("[data-del]");
   if (!del) return;
-  const entry = state.entries.find(x => x.id === del.dataset.del);
+
+  const id = del.dataset.del;
+  const isPast = !!state.viewMonth && state.viewMonth !== state.month;
+  const entry = (isPast ? state.pastEntries : state.entries).find(x => x.id === id);
+
   // Anyone can remove their own; an Ev Abi can remove anyone's.
   if (entry && entry.member !== state.member && !state.evAbi) {
     return toast("Only the Ev Abi can delete someone else's entry.", true);
   }
+  // A closed month is Ev Abi territory, whoever the entry belongs to.
+  if (isPast && !state.evAbi) {
+    return toast("Only the Ev Abi can change a finished month.", true);
+  }
   if (!confirm("Delete this entry?")) return;
+
   try {
-    await store.deleteEntry(del.dataset.del);
+    await store.deleteEntry(id);
+    // The live month re-renders off its listener; a closed month has none,
+    // so refetch and republish that month's standing by hand.
+    if (isPast) await refreshPastMonth();
     toast("Entry deleted");
   } catch (err) {
     toast(err.message || "Could not delete.", true);

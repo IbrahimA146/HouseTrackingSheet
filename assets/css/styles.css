@@ -344,6 +344,17 @@ input:focus { outline: 2.5px solid var(--accent); outline-offset: -1px; border-c
 .bar > span.done { background: var(--good); }
 .bar > span.low  { background: var(--bad); }
 
+.monthbar { display: flex; align-items: center; gap: 10px; }
+.monthbar-label {
+  font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text-dim);
+}
+.monthbar select { width: auto; flex: 1; min-height: 44px; }
+.logrow-fix { grid-template-columns: 1fr 1fr; }
+@media (min-width: 720px) {
+  .logrow-fix { grid-template-columns: 1.4fr 1fr 100px auto; }
+}
+
 /* ----------------------------------------------------------- log form -- */
 .seg {
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px;

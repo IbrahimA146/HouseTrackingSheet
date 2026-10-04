@@ -77,10 +77,15 @@ export const HOUSES = [
 export const AUTH_DOMAIN = "maneviyat.app";
 
 // --- Passwords ------------------------------------------------------------
-// The Ev Abi password, used only to prove you're the Ev Abi of a house you
-// already have the house password for. An Ev Abi can change it in Settings.
-// Once changed, the stored value wins and this line stops being used.
-export const DEFAULT_EV_ABI_PASSWORD = "RRgoat";
+// Bootstrap only, and intentionally empty.
+//
+// The real Ev Abi password is a salted hash held in Firestore, set during
+// setup. Anything written here would be readable by anyone who views the page
+// source, so nothing lives here now that setup has run.
+//
+// Only fill this in temporarily if you ever start a brand new Firebase project
+// and need to get through the setup wizard again. Empty it straight after.
+export const BOOTSTRAP_EV_ABI_PASSWORD = "";
 
 // NOTE: house passwords are deliberately NOT stored in this file.
 //
