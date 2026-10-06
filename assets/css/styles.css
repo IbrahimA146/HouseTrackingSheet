@@ -503,3 +503,99 @@ input:focus { outline: 2.5px solid var(--accent); outline-offset: -1px; border-c
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+
+/* ======================================================= CELEBRATION === */
+.celebrate {
+  position: fixed; inset: 0; z-index: 300;
+  display: grid; place-items: center; pointer-events: none;
+}
+.celebrate canvas { position: absolute; inset: 0; }
+.celebrate-core {
+  position: relative; text-align: center;
+  padding: 26px 34px; border-radius: 22px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: 0 18px 50px -18px hsla(var(--glow-hue, 196), 70%, 50%, .45);
+  backdrop-filter: blur(7px);
+  animation: celebrate-in .5s cubic-bezier(.2,.9,.3,1.1);
+}
+.celebrate-amount {
+  font-size: 2.6rem; font-weight: 700; letter-spacing: -.03em; line-height: 1;
+  color: hsl(var(--glow-hue, 196), 65%, 42%);
+}
+:root[data-theme="dark"] .celebrate-amount { color: hsl(var(--glow-hue, 196), 75%, 68%); }
+.celebrate-label {
+  font-size: .78rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--text-dim); margin-top: 6px;
+}
+.celebrate-tier {
+  margin-top: 12px; font-size: 1.05rem; font-weight: 650;
+  color: var(--text); opacity: .9;
+}
+@keyframes celebrate-in {
+  from { opacity: 0; transform: scale(.9) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.celebrate:not(.is-on) { opacity: 0; }
+.celebrate.is-on { animation: celebrate-fade 1.9s ease forwards; }
+@keyframes celebrate-fade {
+  0%, 62% { opacity: 1; }
+  100%    { opacity: 0; }
+}
+
+/* ========================================================= SCORE TAB === */
+.score-big {
+  font-size: 3.6rem; font-weight: 700; line-height: 1;
+  letter-spacing: -.045em; color: var(--accent-deep);
+}
+.weighted { display: grid; gap: 14px; margin-top: 18px; }
+.wrow { background: var(--surface-2); border-radius: 13px; padding: 13px 14px; }
+.wrow-head { display: flex; justify-content: space-between; align-items: baseline; }
+.wrow-name { font-weight: 650; font-size: .95rem; }
+.wrow-weight {
+  font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text-dim);
+}
+.wrow-bar {
+  height: 8px; background: var(--border); border-radius: 99px;
+  overflow: hidden; margin: 9px 0 7px;
+}
+.wrow-bar > span {
+  display: block; height: 100%; border-radius: 99px; background: var(--accent);
+  transition: width .5s cubic-bezier(.4,0,.2,1);
+}
+.wrow-foot {
+  display: flex; justify-content: space-between;
+  font-size: .8rem; color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+.wrow-points { font-weight: 700; color: var(--accent-deep); }
+.wtotal {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 13px 14px; border-top: 2px solid var(--border);
+  font-size: .95rem; font-weight: 650;
+}
+.wtotal strong { font-size: 1.4rem; color: var(--accent-deep); font-variant-numeric: tabular-nums; }
+
+/* ======================================================== HOUSES TAB === */
+.house-admin { display: grid; gap: 9px; }
+.house-admin-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 13px; background: var(--surface-2); border-radius: 13px;
+  border: 1.5px solid transparent;
+}
+.house-admin-row.is-current { border-color: var(--accent); background: var(--accent-soft); }
+.house-admin-body { min-width: 0; flex: 1; }
+.house-admin-row .btn { margin-left: auto; }
+.house-form-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.logrow-house { grid-template-columns: 1fr; }
+@media (min-width: 720px) { .logrow-house { grid-template-columns: 140px 1fr; } }
+textarea {
+  font: inherit; font-size: 1rem; color: var(--text);
+  background: var(--surface); border: 1.5px solid var(--border-strong);
+  border-radius: 12px; padding: 12px 14px; width: 100%; resize: vertical;
+  line-height: 1.6;
+}
+textarea:focus { outline: 2.5px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+.mem-cat-of { font-size: .7rem; font-weight: 500; color: var(--text-dim); }
+.sharebar > span.done { background: var(--good); }

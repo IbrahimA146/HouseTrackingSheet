@@ -1,11 +1,10 @@
 // ---------------------------------------------------------------------------
-// config.js: everything you might want to change lives here.
+// config.js: the knobs. Houses themselves are no longer here, they live in
+// Firestore so they can be added from inside the app.
 // ---------------------------------------------------------------------------
 
 // --- Firebase -------------------------------------------------------------
-// Paste your project's web config here. While these stay as "PASTE_...", the
-// app runs on local demo data so you can try it without any setup.
-// These keys are public by design; firestore.rules is what protects the data.
+// Public by design. firestore.rules is what protects the data, not these.
 export const firebaseConfig = {
   apiKey: "AIzaSyB093OQYb4v5eqKdzts8Fg2MmWAe6v4EPM",
   authDomain: "maneviyat-ad697.firebaseapp.com",
@@ -16,12 +15,18 @@ export const firebaseConfig = {
 };
 
 // --- The competition ------------------------------------------------------
-// Fixed. Every house must reach all three.
 export const THRESHOLDS = { books: 500, quran: 80, cevsen: 300 };
 
-// Every member must personally reach this share of each threshold,
-// i.e. 50 book pages, 8 Qur'an pages, 30 bab. Miss one and the house is out.
+// Every member must personally reach this share of each THRESHOLD.
+// 10% of 500 / 80 / 300 is 50 book pages, 8 Qur'an pages, 30 bab.
+//
+// Note this is 10% of the threshold, a fixed number, not 10% of whatever the
+// house happens to have logged. Everyone knows their target on day one and it
+// never moves.
 export const MIN_SHARE = 0.10;
+
+// Final score weighting. Books count for most, Cevsen for least.
+export const WEIGHTS = { books: 0.60, quran: 0.30, cevsen: 0.10 };
 
 export const CATEGORIES = [
   { key: "books",  label: "Book pages", short: "Books",  hint: "Pages of religious books read" },
@@ -30,89 +35,24 @@ export const CATEGORIES = [
 ];
 export const CAT_KEYS = CATEGORIES.map(c => c.key);
 
-// --- The houses -----------------------------------------------------------
-// The FIRST name in each list is the Ev Abi. Order of the rest doesn't matter.
-// `id` is used as a database key. Don't change it once people have logged
-// anything, or that history stops lining up.
-export const HOUSES = [
-  {
-    id: "risale", code: "RR", name: "Risale Regents", address: "Regents 26th (523) · 5x2",
-    members: [
-      "Ibrahim Aksoy", "Arif Camci", "Alperen Aydin",
-      "Erdem Dogan", "Ihsan Yildirim", "Ahmet Karabay"
-    ]
-  },
-  {
-    id: "grand", code: "GR", name: "Grand Regents", address: "Regents 26th · 5x2",
-    members: [
-      "Emre Tunca", "Serdar Can Cakin", "Enes Gurbuz",
-      "Fahreddin Ali Pala", "Cemal Taban", "Abdulaziz Imanaliev"
-    ]
-  },
-  {
-    id: "prestige", code: "PRP", name: "Prestige Pearl", address: "Pearl 608 · 4x2",
-    members: [
-      "Nihat Topcu", "Mehmet Bisen", "Adil Ulu",
-      "Ali Guvener", "Alper Ozbey", "Erkam Said Ekici"
-    ]
-  },
-  {
-    id: "pirlanta", code: "PIP", name: "Pirlanta Pearl", address: "Pearl 603 · 4x2",
-    members: [
-      "Bera Dogan", "Yusuf Koroglu", "Esad Gürbüz",
-      "Efe Gürbüz", "Hakan Ince", "Mehmet Canbegi"
-    ]
-  },
-  {
-    id: "gurbet", code: "GG", name: "Gurbet Galileo", address: "Galileo 408 · 3x2",
-    members: [
-      "Selim Gurkas", "Ramiz Aksoy", "Yahya Güvercin",
-      "Omer Dokan", "Ahmed Yakub Sarihan"
-    ]
-  }
-];
+// First month of the competition. Every month from here onward is kept.
+export const COMPETITION_START_MONTH = "2026-09";
 
-// Each house signs in as one Firebase account: <house id>@maneviyat.app.
-// The domain is never emailed, it just has to be a valid-looking address.
-export const AUTH_DOMAIN = "maneviyat.app";
-
-// --- Passwords ------------------------------------------------------------
-// Bootstrap only, and intentionally empty.
-//
-// The real Ev Abi password is a salted hash held in Firestore, set during
-// setup. Anything written here would be readable by anyone who views the page
-// source, so nothing lives here now that setup has run.
-//
-// Only fill this in temporarily if you ever start a brand new Firebase project
-// and need to get through the setup wizard again. Empty it straight after.
-export const BOOTSTRAP_EV_ABI_PASSWORD = "";
-
-// NOTE: house passwords are deliberately NOT stored in this file.
-//
-// Everything in src/ is downloaded by every visitor's browser, so anything
-// written here is public, whether or not the repository is private. Putting
-// the house passwords here would let any member read every other house's
-// password from View Source, which is exactly the wall this app is meant to
-// keep up. You type them once in the setup wizard instead.
-
-// Firebase refuses any password under 6 characters. The house passwords are
-// shorter than that so they stay easy to say out loud, so the app appends this
-// suffix before handing anything to Firebase: someone types a short password,
-// and Firebase stores that password plus this.
-//
-// It is not a secret, it just satisfies the length rule. Changing it would
-// lock out every existing house, so leave it alone once you are set up.
-export const PASSWORD_SUFFIX = ".mnv.house";
-
-// Shortest password someone is allowed to type. The suffix covers the rest.
-export const MIN_PASSWORD_LENGTH = 4;
-
-// Demo-mode house password. Demo mode only, never used against Firebase.
-export const DEMO_HOUSE_PASSWORD = "demo";
+// --- Seeding --------------------------------------------------------------
+// Written to Firestore once, only if no houses exist yet. The id must stay
+// "risale" forever: every entry already logged is tagged with it, and changing
+// it would orphan all of that history.
+export const SEED_HOUSE = {
+  id: "risale",
+  code: "RR",
+  name: "Risale Regents",
+  address: "Regents 26th (523) · 5x2",
+  members: [
+    "Ibrahim Aksoy", "Arif Camci", "Alperen Aydin",
+    "Erdem Dogan", "Ihsan Yildirim", "Ahmet Karabay"
+  ]
+};
 
 // --- Derived helpers ------------------------------------------------------
-export const houseById  = id => HOUSES.find(h => h.id === id) || null;
-export const evAbiOf    = house => house.members[0];
-export const isEvAbi    = (house, member) => house.members[0] === member;
 export const memberFloor = () =>
   CAT_KEYS.reduce((o, k) => (o[k] = Math.ceil(THRESHOLDS[k] * MIN_SHARE), o), {});

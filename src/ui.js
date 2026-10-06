@@ -2,7 +2,7 @@
 // ui.js: turns state into HTML. No network calls, no event wiring.
 // ---------------------------------------------------------------------------
 
-import { CATEGORIES, CAT_KEYS, THRESHOLDS, MIN_SHARE } from "./config.js";
+import { CATEGORIES, CAT_KEYS, THRESHOLDS, WEIGHTS, MIN_SHARE } from "./config.js";
 import { monthLabel, daysLeftIn } from "./scoring.js";
 
 export const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
@@ -17,18 +17,18 @@ const ordinal = n => ["", "st", "nd", "rd"][n] || "th";
 // --------------------------------------------------------------- pickers --
 export function houseCards(houses) {
   return houses.map(h => `
-    <button class="house-card" data-house="${h.id}">
+    <button class="house-card" data-house="${esc(h.id)}">
       <span class="house-badge">${esc(h.code || initials(h.name))}</span>
       <span class="house-card-body">
         <span class="house-card-name">${esc(h.name)}</span>
-        <span class="house-card-meta">${esc(h.address)} · ${h.members.length} members</span>
+        <span class="house-card-meta">${esc(h.address || "")}${h.address ? " · " : ""}${(h.members || []).length} members</span>
       </span>
       <span class="house-card-chev">›</span>
     </button>`).join("");
 }
 
 export function memberCards(house) {
-  return house.members.map((name, i) => `
+  return (house.members || []).map((name, i) => `
     <button class="member-card ${i === 0 ? "evabi" : ""}" data-member="${esc(name)}">
       <span class="member-avatar">${initials(name)}</span>
       <span class="member-name">${esc(name)}</span>
@@ -53,8 +53,9 @@ function metric(label, value, target, floorMode) {
 }
 
 // ------------------------------------------------------------- "Me" tab --
-export function renderMe({ member, house, standing, myEntries, month, canDelete }) {
-  const me = standing.members.find(m => m.name === member);
+export function renderMe({ member, house, standing, myEntries, month }) {
+  const me = standing.members.find(m => m.name === member)
+          || { totals: {}, short: {}, ok: false };
   const floor = standing.floor;
   const days = daysLeftIn(month);
 
@@ -62,18 +63,18 @@ export function renderMe({ member, house, standing, myEntries, month, canDelete 
     <section class="card">
       <div class="card-head">
         <div>
-          <h2>Selamün aleyküm, ${esc(member.split(" ")[0])}</h2>
+          <h2>Selamün aleyküm, ${esc(String(member).split(" ")[0])}</h2>
           <p class="muted">${esc(house.name)} · ${days} day${days === 1 ? "" : "s"} left in ${monthLabel(month)}</p>
         </div>
         <span class="chip ${me.ok ? "good" : "bad"}">${me.ok ? "Floor cleared" : "Below floor"}</span>
       </div>
       <div class="metrics">
-        ${CATEGORIES.map(c => metric(c.short, me.totals[c.key], floor[c.key], true)).join("")}
+        ${CATEGORIES.map(c => metric(c.short, me.totals[c.key] || 0, floor[c.key], true)).join("")}
       </div>
       <p class="fineprint" style="margin-top:12px">
-        Your personal floor is ${Math.round(MIN_SHARE * 100)}% of each threshold:
+        Everyone does the same ${Math.round(MIN_SHARE * 100)}% of each threshold:
         ${CAT_KEYS.map(k => `<strong>${floor[k]} ${CATEGORIES.find(c => c.key === k).short.toLowerCase()}</strong>`).join(", ")}.
-        Miss one and the whole house is disqualified.
+        Fixed numbers, not a share of what the house logs.
       </p>
     </section>
 
@@ -93,7 +94,7 @@ export function renderMe({ member, house, standing, myEntries, month, canDelete 
         <p class="fineprint" id="logHint" style="margin-top:9px">${CATEGORIES[0].hint}</p>
       </form>
       <div class="entries">
-        ${myEntries.length ? myEntries.map(e => entryRow(e, canDelete)).join("")
+        ${myEntries.length ? myEntries.map(e => entryRow(e, true)).join("")
                            : `<p class="empty">Nothing logged yet this month.</p>`}
       </div>
     </section>`;
@@ -112,7 +113,7 @@ function entryRow(e, canDelete, withName = false) {
 }
 
 // ---------------------------------------------------------- "House" tab --
-export function renderHouse({ house, standing, viewMonth, months, isPast, evAbi, entries, loading }) {
+export function renderHouse({ house, standing, viewMonth, months, isPast, entries, loading }) {
   const days = daysLeftIn(viewMonth);
   const st = standing.status;
 
@@ -138,7 +139,7 @@ export function renderHouse({ house, standing, viewMonth, months, isPast, evAbi,
       <div class="card-head" style="margin-top:14px">
         <div>
           <h2>${esc(house.name)}</h2>
-          <p class="muted">${esc(house.address)} · ${standing.memberCount} members</p>
+          <p class="muted">${esc(house.address || "")}${house.address ? " · " : ""}${standing.memberCount} members</p>
         </div>
         <span class="chip ${st.tone}">${st.label}</span>
       </div>
@@ -154,8 +155,8 @@ export function renderHouse({ house, standing, viewMonth, months, isPast, evAbi,
     <section class="card">
       <div class="card-head">
         <div>
-          <h2>Who contributed what</h2>
-          <p class="muted">Share of the house total, and whether each man cleared his floor</p>
+          <h2>Everyone's 10%</h2>
+          <p class="muted">Each man needs ${CAT_KEYS.map(k => `${standing.floor[k]} ${CATEGORIES.find(c => c.key === k).short.toLowerCase()}`).join(", ")}</p>
         </div>
       </div>
       <div class="mem-list">
@@ -163,51 +164,7 @@ export function renderHouse({ house, standing, viewMonth, months, isPast, evAbi,
       </div>
     </section>
 
-    ${isPast && evAbi ? correctionPanel(house, viewMonth, entries) : ""}`;
-}
-
-/**
- * Ev Abi only, and only for a month that has already closed. A finished month
- * is normally untouchable, but numbers do get logged wrong, and without this
- * the only fix is editing the database by hand.
- */
-function correctionPanel(house, viewMonth, entries) {
-  const rows = [...entries].sort((a, b) =>
-    a.member.localeCompare(b.member) || a.category.localeCompare(b.category));
-
-  return `
-    <section class="card">
-      <div class="card-head">
-        <div>
-          <h2>Correct ${monthLabel(viewMonth)}</h2>
-          <p class="muted">Ev Abi only. Changing a closed month also updates who won it.</p>
-        </div>
-      </div>
-
-      <form id="fixForm" class="logform">
-        <div class="logrow logrow-fix">
-          <select id="fixMember">
-            ${house.members.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("")}
-          </select>
-          <select id="fixCat">
-            ${CATEGORIES.map(c => `<option value="${c.key}">${c.short}</option>`).join("")}
-          </select>
-          <input type="number" id="fixAmount" min="1" step="1" inputmode="numeric"
-                 placeholder="Amount" required>
-          <button class="btn btn-primary" type="submit">Add to ${monthLabel(viewMonth).split(" ")[0]}</button>
-        </div>
-        <p class="fineprint">
-          Entries are append-only, so correcting 20 to 30 means adding 10, or
-          deleting the wrong row below and adding a right one.
-        </p>
-      </form>
-
-      <div class="entries">
-        ${rows.length
-          ? rows.map(e => entryRow(e, true, true)).join("")
-          : `<p class="empty">Nothing was logged in ${monthLabel(viewMonth)}.</p>`}
-      </div>
-    </section>`;
+    ${correctionPanel(house, viewMonth, entries, isPast)}`;
 }
 
 function memberBlock(m, standing) {
@@ -220,48 +177,114 @@ function memberBlock(m, standing) {
       <div class="mem-cats">
         ${CAT_KEYS.map(k => {
           const need = m.short[k];
+          const target = standing.floor[k];
           return `
           <div class="mem-cat">
             <div class="mem-cat-label">${CATEGORIES.find(c => c.key === k).short}</div>
-            <div class="mem-cat-val ${need ? "miss" : ""}">${nf(m.totals[k])}</div>
+            <div class="mem-cat-val ${need ? "miss" : ""}">${nf(m.totals[k])}<span class="mem-cat-of">/${target}</span></div>
             ${need ? `<div class="mem-cat-need">need ${need} more</div>`
-                   : `<div class="mem-cat-share">${m.share[k].toFixed(0)}% of house</div>`}
-            <div class="sharebar"><span style="width:${Math.min(100, m.share[k])}%"></span></div>
+                   : `<div class="mem-cat-share">done</div>`}
+            <div class="sharebar"><span class="${need ? "" : "done"}" style="width:${m.floorPct[k]}%"></span></div>
           </div>`;
         }).join("")}
       </div>
     </div>`;
 }
 
-// ------------------------------------------------------ "Standings" tab --
-export function renderRank({ myHouseId, ranking, month, history }) {
-  const mine = ranking.ordered.find(r => r.houseId === myHouseId);
-  const total = ranking.ordered.length;
-
-  const hero = mine.rank
-    ? `<div class="rank-num">${mine.rank}<sup>${ordinal(mine.rank)}</sup></div>
-       <div class="rank-of">of ${total} houses · ${ranking.qualifiedCount} qualified so far</div>`
-    : `<div class="rank-unranked">Not ranked yet</div>
-       <div class="rank-of">Only houses that qualify take a place.<br>
-         ${ranking.qualifiedCount} of ${total} have qualified so far.</div>`;
+function correctionPanel(house, viewMonth, entries, isPast) {
+  const rows = [...(entries || [])].sort((a, b) =>
+    String(a.member).localeCompare(String(b.member)) ||
+    String(a.category).localeCompare(String(b.category)));
 
   return `
     <section class="card">
-      <div class="card-head"><h2>Your place · ${monthLabel(month)}</h2></div>
-      <div class="rankhero">${hero}</div>
-    </section>
-
-    <section class="card">
       <div class="card-head">
         <div>
-          <h2>The ladder</h2>
-          <p class="muted">Other houses stay hidden. You only see where you sit</p>
+          <h2>Fix ${monthLabel(viewMonth)}</h2>
+          <p class="muted">${isPast ? "This month is closed, but numbers can still be put right." : "Add to anyone, or delete a wrong row."}</p>
         </div>
       </div>
-      <div class="ladder">
-        ${ranking.ordered.map((r, i) => rung(r, i, myHouseId)).join("")}
+
+      <form id="fixForm" class="logform">
+        <div class="logrow logrow-fix">
+          <select id="fixMember">
+            ${(house.members || []).map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("")}
+          </select>
+          <select id="fixCat">
+            ${CATEGORIES.map(c => `<option value="${c.key}">${c.short}</option>`).join("")}
+          </select>
+          <input type="number" id="fixAmount" min="1" step="1" inputmode="numeric"
+                 placeholder="Amount" required>
+          <button class="btn btn-primary" type="submit">Add</button>
+        </div>
+        <p class="fineprint">
+          Entries are append-only, so turning 20 into 30 means adding 10, or
+          deleting the wrong row and adding a right one.
+        </p>
+      </form>
+
+      <div class="entries">
+        ${rows.length ? rows.map(e => entryRow(e, true, true)).join("")
+                      : `<p class="empty">Nothing logged in ${monthLabel(viewMonth)}.</p>`}
       </div>
+    </section>`;
+}
+
+// ---------------------------------------------------------- "Score" tab --
+export function renderRank({ myHouseId, ranking, month, history, standing }) {
+  const mine = ranking.ordered.find(r => r.houseId === myHouseId) || ranking.ordered[0];
+  const total = ranking.ordered.length;
+  const solo = total <= 1;
+
+  const hero = mine?.rank
+    ? `<div class="rank-num">${mine.rank}<sup>${ordinal(mine.rank)}</sup></div>
+       <div class="rank-of">of ${total} house${total === 1 ? "" : "s"} · ${ranking.qualifiedCount} qualified</div>`
+    : `<div class="rank-unranked">Not qualified yet</div>
+       <div class="rank-of">A house takes a place only once it qualifies.</div>`;
+
+  return `
+    <section class="card">
+      <div class="card-head"><h2>Final score · ${monthLabel(month)}</h2></div>
+      <div class="rankhero">
+        <div class="score-big">${standing.score.toFixed(1)}</div>
+        <div class="rank-of">100 means every threshold hit exactly</div>
+      </div>
+      <div class="weighted">
+        ${standing.breakdown.map(b => {
+          const cat = CATEGORIES.find(c => c.key === b.key);
+          return `
+          <div class="wrow">
+            <div class="wrow-head">
+              <span class="wrow-name">${cat.short}</span>
+              <span class="wrow-weight">${Math.round(b.weight * 100)}% weight</span>
+            </div>
+            <div class="wrow-bar"><span style="width:${Math.min(100, b.pctOfTarget)}%"></span></div>
+            <div class="wrow-foot">
+              <span>${nf(b.total)} / ${nf(b.threshold)}</span>
+              <span class="wrow-points">+${b.points.toFixed(1)} pts</span>
+            </div>
+          </div>`;
+        }).join("")}
+        <div class="wtotal">
+          <span>Total</span>
+          <strong>${standing.score.toFixed(1)}</strong>
+        </div>
+      </div>
+      <p class="fineprint" style="margin-top:12px">
+        Books count ${Math.round(WEIGHTS.books * 100)}%, Qur&rsquo;an ${Math.round(WEIGHTS.quran * 100)}%,
+        Cev&#351;en ${Math.round(WEIGHTS.cevsen * 100)}%. Reaching a threshold early
+        keeps adding points, so going past 100 is possible.
+      </p>
     </section>
+
+    ${solo ? "" : `
+    <section class="card">
+      <div class="card-head"><h2>Your place</h2></div>
+      <div class="rankhero">${hero}</div>
+      <div class="ladder">
+        ${ranking.ordered.map(r => rung(r, myHouseId)).join("")}
+      </div>
+    </section>`}
 
     <section class="card">
       <div class="card-head">
@@ -274,88 +297,79 @@ export function renderRank({ myHouseId, ranking, month, history }) {
         ? history.map(h => `
             <div class="histrow">
               <strong>${monthLabel(h.month)}</strong>
-              <span class="muted">${h.winner
-                ? `Winner: ${esc(h.winner.name)}`
-                : "No house qualified"}</span>
+              <span class="muted">${h.winner ? `Winner: ${esc(h.winner.name)}` : "Nobody qualified"}</span>
             </div>`).join("")
-        : `<p class="empty">No finished months yet. This month is the first.</p>`}
+        : `<p class="empty">No finished months yet.</p>`}
     </section>`;
 }
 
-function rung(r, i, myHouseId) {
+function rung(r, myHouseId) {
   const isMine = r.houseId === myHouseId;
   const isTop = r.rank === 1;
-  const pos = r.rank || "&middot;";
   return `
     <div class="rung ${isMine ? "mine" : ""} ${isTop ? "top" : ""}">
-      <span class="rung-pos">${pos}</span>
+      <span class="rung-pos">${r.rank || "&middot;"}</span>
       <span class="rung-name ${isMine ? "" : "hidden-house"}">
-        ${isMine ? esc(r.name) : "Hidden house"}
+        ${isMine ? esc(r.name) : "Another house"}
       </span>
-      <span class="rung-tail">
-        ${isMine ? `score ${r.score.toFixed(1)}` : (r.qualified ? "qualified" : "not qualified")}
-      </span>
+      <span class="rung-tail">${isMine ? `score ${r.score.toFixed(1)}` : (r.qualified ? "qualified" : "not qualified")}</span>
     </div>`;
 }
 
-// -------------------------------------------------------- "Ev Abi" tab --
-export function renderSettings({ house, allEntries }) {
+// --------------------------------------------------------- "Houses" tab --
+export function renderHouses({ houses, currentHouseId }) {
   return `
     <section class="card">
-      <div class="card-head"><h2>Ev Abi</h2></div>
-      <p class="note">
-        You have exactly two powers: set the password your housemates use to get in,
-        and delete a wrong entry. Everything else happens automatically:
-        the thresholds, the monthly reset and the winner.
-      </p>
+      <div class="card-head">
+        <div>
+          <h2>Houses</h2>
+          <p class="muted">Add a house and its members. Nothing anyone logged is ever deleted.</p>
+        </div>
+      </div>
+      <div class="house-admin">
+        ${houses.map(h => `
+          <div class="house-admin-row ${h.id === currentHouseId ? "is-current" : ""}">
+            <span class="house-badge">${esc(h.code || initials(h.name))}</span>
+            <span class="house-admin-body">
+              <span class="house-card-name">${esc(h.name)}</span>
+              <span class="house-card-meta">${(h.members || []).length} members${h.address ? " · " + esc(h.address) : ""}</span>
+            </span>
+            <button class="btn btn-ghost btn-sm" data-edit-house="${esc(h.id)}">Edit</button>
+          </div>`).join("")}
+      </div>
     </section>
 
     <section class="card">
       <div class="card-head">
         <div>
-          <h2>House password</h2>
-          <p class="muted">What ${esc(house.name)} types to get in. At least 6 characters.</p>
+          <h2 id="houseFormTitle">Add a house</h2>
+          <p class="muted">One member per line</p>
         </div>
       </div>
-      <form id="housePwForm" class="stack">
-        <label>New house password
-          <input type="password" id="newHousePw" minlength="6" required
-                 autocomplete="new-password" placeholder="New password">
+      <form id="houseForm" class="stack">
+        <input type="hidden" id="houseEditingId" value="">
+        <label>House name
+          <input type="text" id="houseName" required maxlength="40" placeholder="Grand Regents">
         </label>
-        <button class="btn btn-primary" type="submit">Change house password</button>
-        <p class="fineprint">
-          Housemates already signed in stay in. Anyone signing in fresh will need the new one.
-        </p>
-      </form>
-    </section>
-
-    <section class="card">
-      <div class="card-head">
-        <div>
-          <h2>Ev Abi password</h2>
-          <p class="muted">The second password that proves an Ev Abi. Shared by all five.</p>
+        <div class="logrow logrow-house">
+          <label>Short code
+            <input type="text" id="houseCode" maxlength="4" placeholder="GR">
+          </label>
+          <label>Address <span class="hint">optional</span>
+            <input type="text" id="houseAddress" maxlength="60" placeholder="Regents 26th · 5x2">
+          </label>
         </div>
-      </div>
-      <form id="evAbiPwForm" class="stack">
-        <label>New Ev Abi password
-          <input type="password" id="newEvAbiPw" minlength="4" required
-                 autocomplete="new-password" placeholder="New password">
+        <label>Members, one per line
+          <textarea id="houseMembers" rows="7" required
+                    placeholder="Emre Tunca&#10;Serdar Can Cakin&#10;Enes Gurbuz"></textarea>
         </label>
-        <button class="btn btn-ghost" type="submit">Change Ev Abi password</button>
-      </form>
-    </section>
-
-    <section class="card">
-      <div class="card-head">
-        <div>
-          <h2>Fix an entry</h2>
-          <p class="muted">Delete anything logged wrong this month</p>
+        <p class="fineprint">The first name is the Ev Abi.</p>
+        <div class="house-form-actions">
+          <button class="btn btn-primary" type="submit" id="houseSave">Add house</button>
+          <button class="btn btn-ghost" type="button" id="houseCancel" hidden>Cancel</button>
+          <button class="btn btn-danger" type="button" id="houseDelete" hidden>Remove from list</button>
         </div>
-      </div>
-      <div class="entries">
-        ${allEntries.length
-          ? allEntries.map(e => entryRow(e, true, true)).join("")
-          : `<p class="empty">Nothing logged in the house yet.</p>`}
-      </div>
+        <p class="errmsg" id="houseError" hidden></p>
+      </form>
     </section>`;
 }

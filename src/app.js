@@ -1,36 +1,36 @@
 // ---------------------------------------------------------------------------
 // app.js: screen flow, state, and event wiring.
 //
-// Flow: pick house -> pick your name -> password(s) -> dashboard.
+// Flow: pick house -> pick your name -> you are in. No password anywhere.
 // ---------------------------------------------------------------------------
 
+import { CATEGORIES, COMPETITION_START_MONTH, memberFloor } from "./config.js";
 import {
-  HOUSES, CATEGORIES, MIN_PASSWORD_LENGTH, houseById, isEvAbi
-} from "./config.js";
-import {
-  houseStanding, rankHouses, winnerOf, monthKey, monthLabelShort, previousMonths
+  houseStanding, rankHouses, winnerOf, monthKey, monthLabelShort, monthsSince
 } from "./scoring.js";
 import * as store from "./store.js";
 import * as ui from "./ui.js";
+import { celebrate } from "./celebrate.js";
 
 const $ = id => document.getElementById(id);
 
 const state = {
+  houses: [],
   houseId: null,
   member: null,
-  evAbi: false,
   month: monthKey(),
-  entries: [],        // this house, this month
-  standings: [],       // every house's public totals, this month
+  entries: [],
+  standings: [],
   history: [],
   tab: "me",
   logCat: CATEGORIES[0].key,
-  // House tab can look back at a finished month. Null means "the live month".
   viewMonth: null,
   pastEntries: [],
   pastLoading: false,
   unsub: []
 };
+
+const house = () => state.houses.find(h => h.id === state.houseId) || null;
 
 // ---------------------------------------------------------------- helpers --
 let toastTimer;
@@ -43,7 +43,7 @@ function toast(msg, isError = false) {
   toastTimer = setTimeout(() => { t.hidden = true; }, 3200);
 }
 
-const SCREENS = ["boot", "screenHouse", "screenSetup", "screenMember", "screenGate", "screenMain"];
+const SCREENS = ["boot", "screenHouse", "screenMember", "screenMain"];
 function show(id) {
   SCREENS.forEach(s => { $(s).hidden = s !== id; });
   window.scrollTo(0, 0);
@@ -54,27 +54,22 @@ function show(id) {
   try {
     const saved = localStorage.getItem("maneviyat-theme");
     if (saved) document.documentElement.setAttribute("data-theme", saved);
-  } catch { /* storage blocked; system preference still applies */ }
+  } catch { /* storage blocked; light stays the default */ }
 })();
 
 $("themeBtn").addEventListener("click", () => {
-  // Light is the default, so "dark" is only ever an explicit choice.
   const root = document.documentElement;
   const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
   root.setAttribute("data-theme", next);
   try { localStorage.setItem("maneviyat-theme", next); } catch {}
 });
 
-// =========================================================== 1. HOUSES ====
-$("houseGrid").innerHTML = ui.houseCards(HOUSES);
-
-// Say so, loudly. Without this there is no way to tell why a real house
-// password is being refused.
 if (store.isDemo) {
   $("demoNote").hidden = false;
   $("demoBanner").hidden = false;
 }
 
+// =========================================================== 1. HOUSES ====
 $("houseGrid").addEventListener("click", e => {
   const btn = e.target.closest("[data-house]");
   if (!btn) return;
@@ -82,190 +77,39 @@ $("houseGrid").addEventListener("click", e => {
   openMemberPicker();
 });
 
-// ====================================================== 1b. FIRST SETUP ====
-// Creates the five house logins from the browser, so the Firebase console is
-// never needed. Gated behind the Ev Abi password.
-
-$("openSetup").addEventListener("click", () => {
-  $("setupGate").hidden = false;
-  $("setupForm").hidden = true;
-  $("setupDone").hidden = true;
-  $("setupGatePw").value = "";
-  $("setupGateError").hidden = true;
-  show("screenSetup");
-  setTimeout(() => $("setupGatePw").focus(), 120);
-});
-
-$("setupBack").addEventListener("click", () => show("screenHouse"));
-
-$("setupGateForm").addEventListener("submit", async e => {
-  e.preventDefault();
-  const err = $("setupGateError");
-  err.hidden = true;
-
-  const ok = await store.verifyEvAbi($("setupGatePw").value);
-  if (!ok) {
-    err.textContent = "Wrong Ev Abi password.";
-    err.hidden = false;
-    return;
-  }
-
-  $("setupFields").innerHTML = HOUSES.map(h => `
-    <label class="setup-field">
-      <span class="setup-field-head">
-        <span class="setup-field-code">${ui.esc(h.code)}</span>
-        <span>
-          <span class="setup-field-name">${ui.esc(h.name)}</span>
-          <span class="setup-field-addr">${ui.esc(h.address)}</span>
-        </span>
-      </span>
-      <input type="text" class="setup-pw" data-house="${h.id}"
-             minlength="${MIN_PASSWORD_LENGTH}" required autocomplete="off"
-             spellcheck="false" autocapitalize="off"
-             placeholder="Password for ${ui.esc(h.name)}">
-    </label>`).join("");
-  $("setupGate").hidden = true;
-  $("setupForm").hidden = false;
-  setTimeout(() => $("setupFields").querySelector("input")?.focus(), 120);
-});
-
-$("setupPwForm").addEventListener("submit", async e => {
-  e.preventDefault();
-  const btn = $("setupRun");
-  const err = $("setupError");
-  err.hidden = true;
-
-  const passwords = {};
-  document.querySelectorAll(".setup-pw").forEach(i => { passwords[i.dataset.house] = i.value; });
-
-  if (Object.values(passwords).some(p => !p || p.length < MIN_PASSWORD_LENGTH)) {
-    err.textContent =
-      `Every house needs a password of at least ${MIN_PASSWORD_LENGTH} characters.`;
-    err.hidden = false;
-    return;
-  }
-
-  // The starting Ev Abi password is written in src/config.js, which every
-  // visitor can read. Setup must replace it, so this is not optional.
-  const evAbiPw = $("setupEvAbiPw").value.trim();
-  if (evAbiPw.length < MIN_PASSWORD_LENGTH) {
-    err.textContent =
-      `Set a new Ev Abi password of at least ${MIN_PASSWORD_LENGTH} characters. ` +
-      `The starting one is visible in the source, so it cannot be kept.`;
-    err.hidden = false;
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = "Creating…";
-  try {
-    const results = await store.initializeHouses(passwords, evAbiPw);
-    $("setupResults").innerHTML = results.map(r => `
-      <div class="setup-row ${r.ok ? "ok" : "fail"}">
-        <span class="tick">${r.ok ? "✓" : "✕"}</span>
-        <span class="setup-row-body">
-          <span class="setup-row-name">${ui.esc(r.name)}</span>
-          <span class="setup-row-msg">${ui.esc(r.message)}</span>
-        </span>
-      </div>`).join("");
-    $("setupForm").hidden = true;
-    $("setupDone").hidden = false;
-  } catch (ex) {
-    err.textContent = ex.message || "Setup failed.";
-    err.hidden = false;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Create the five house logins";
-  }
-});
-
-$("setupFinish").addEventListener("click", () => show("screenHouse"));
+function renderHousePicker() {
+  $("houseGrid").innerHTML = ui.houseCards(state.houses);
+}
 
 // =========================================================== 2. MEMBER ====
 function openMemberPicker() {
-  const house = houseById(state.houseId);
-  $("memberHouseName").textContent = house.name;
-  $("memberHouseAddress").textContent = house.address;
-  $("memberGrid").innerHTML = ui.memberCards(house);
+  const h = house();
+  if (!h) return show("screenHouse");
+  $("memberHouseName").textContent = h.name;
+  $("memberHouseAddress").textContent = h.address || "";
+  $("memberGrid").innerHTML = ui.memberCards(h);
   show("screenMember");
 }
 
-$("memberGrid").addEventListener("click", e => {
+$("memberGrid").addEventListener("click", async e => {
   const btn = e.target.closest("[data-member]");
   if (!btn) return;
   state.member = btn.dataset.member;
-  openGate();
+  store.completeSignIn(state.houseId, state.member);
+  await enterApp();
 });
 
 document.querySelectorAll("[data-back]").forEach(btn => {
-  btn.addEventListener("click", () => {
-    if (btn.dataset.back === "house") show("screenHouse");
-    else openMemberPicker();
-  });
+  btn.addEventListener("click", () => show("screenHouse"));
 });
 
-// ============================================================= 3. GATE ====
-function openGate() {
-  const house = houseById(state.houseId);
-  const evAbi = isEvAbi(house, state.member);
-
-  $("gateAvatar").textContent = ui.initials(state.member);
-  $("gateName").textContent = state.member;
-  $("gateHouse").textContent = house.name + (evAbi ? " · Ev Abi" : "");
-  $("gateEvAbiWrap").hidden = !evAbi;
-  $("gateEvAbiPw").required = evAbi;
-  $("gateHousePw").value = "";
-  $("gateEvAbiPw").value = "";
-  $("gateError").hidden = true;
-
-  show("screenGate");
-  setTimeout(() => $("gateHousePw").focus(), 120);
-}
-
-$("gateForm").addEventListener("submit", async e => {
-  e.preventDefault();
-  const btn = $("gateSubmit");
-  const err = $("gateError");
-  const house = houseById(state.houseId);
-  const wantsEvAbi = isEvAbi(house, state.member);
-
-  err.hidden = true;
-  btn.disabled = true;
-  btn.textContent = "Checking…";
-
-  try {
-    // Gate 1: the house password. Firebase verifies this server-side.
-    await store.signInHouse(state.houseId, $("gateHousePw").value);
-
-    // Gate 2: the Ev Abi password, only if they claimed that seat.
-    if (wantsEvAbi) {
-      const ok = await store.verifyEvAbi($("gateEvAbiPw").value);
-      if (!ok) {
-        await store.signOutSession();
-        throw new store.StoreError("bad-evabi", "Wrong Ev Abi password.");
-      }
-    }
-
-    store.completeSignIn(state.houseId, state.member, wantsEvAbi);
-    state.evAbi = wantsEvAbi;
-    await enterApp();
-  } catch (ex) {
-    err.textContent = ex.message || "Could not get you in.";
-    err.hidden = false;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Enter";
-  }
-});
-
-// ============================================================== 4. APP ====
+// ============================================================== 3. APP ====
 async function enterApp() {
-  const house = houseById(state.houseId);
-  $("topHouse").textContent = house.name;
-  $("monthPill").textContent = monthLabelShort(state.month);
-  $("tabSettings").hidden = !state.evAbi;
-  if (!state.evAbi && state.tab === "settings") state.tab = "me";
+  const h = house();
+  if (!h) return show("screenHouse");
 
+  $("topHouse").textContent = h.name;
+  $("monthPill").textContent = monthLabelShort(state.month);
   show("screenMain");
   setTab(state.tab);
 
@@ -286,14 +130,11 @@ async function enterApp() {
   loadHistory();
 }
 
-/**
- * Push this house's totals (no member detail) so the other houses can be
- * ranked against us. This is what makes the ladder work without leaking
- * anyone's individual numbers.
- */
 let lastPublished = "";
 function publishOurTotals() {
-  const standing = houseStanding(houseById(state.houseId), state.entries, state.month);
+  const h = house();
+  if (!h) return;
+  const standing = houseStanding(h, state.entries, state.month);
   const fingerprint = JSON.stringify([standing.totals, standing.qualified]);
   if (fingerprint === lastPublished) return;
   lastPublished = fingerprint;
@@ -303,27 +144,25 @@ function publishOurTotals() {
 
 async function loadHistory() {
   try {
-    const months = previousMonths(6);
-    const raw = await store.loadHistory(months);
+    const raw = await store.loadAllStandings();
     state.history = raw
-      .filter(h => h.records.length)
-      .map(h => ({ month: h.month, winner: winnerOf(h.records) }));
+      .filter(h => h.month !== state.month && h.records.length)
+      .map(h => ({ month: h.month, winner: winnerOf(h.records, state.houses) }));
     render();
   } catch (err) {
     console.error("history:", err);
   }
 }
 
-/** The live month plus the last six, newest first. */
+/** Every month of the competition so far, newest first. */
 function monthOptions() {
-  return [{ key: state.month, current: true }]
-    .concat(previousMonths(6, state.month).map(key => ({ key, current: false })));
+  return monthsSince(COMPETITION_START_MONTH, state.month)
+    .map(key => ({ key, current: key === state.month }));
 }
 
 async function loadPastMonth(month) {
   state.viewMonth = month;
   if (month === state.month) { state.pastEntries = []; render(); return; }
-
   state.pastLoading = true;
   render();
   try {
@@ -341,44 +180,14 @@ document.addEventListener("change", e => {
   if (e.target.id === "monthPick") loadPastMonth(e.target.value);
 });
 
-// Correcting a finished month. Republishes that month's standings afterwards,
-// so the winner on the Standings tab reflects the fix.
+/** A closed month has no live listener, so refetch and republish by hand. */
 async function refreshPastMonth() {
   state.pastEntries = await store.loadHouseEntries(state.houseId, state.viewMonth);
-  const standing = houseStanding(houseById(state.houseId), state.pastEntries, state.viewMonth);
+  const standing = houseStanding(house(), state.pastEntries, state.viewMonth);
   await store.publishStanding(state.viewMonth, standing).catch(err =>
     console.error("could not republish standing:", err));
   render();
 }
-
-document.addEventListener("submit", async e => {
-  if (e.target.id !== "fixForm") return;
-  e.preventDefault();
-
-  const amount = parseInt($("fixAmount").value, 10);
-  if (!Number.isFinite(amount) || amount <= 0) return toast("Enter a number above zero.", true);
-  if (amount > 10000) return toast("That looks like a typo.", true);
-
-  const btn = e.target.querySelector("button[type=submit]");
-  btn.disabled = true;
-  try {
-    await store.addEntry({
-      houseId: state.houseId,
-      member: $("fixMember").value,
-      month: state.viewMonth,
-      category: $("fixCat").value,
-      amount,
-      note: "correction"
-    });
-    $("fixAmount").value = "";
-    await refreshPastMonth();
-    toast("Correction saved");
-  } catch (err) {
-    toast(err.message || "Could not save.", true);
-  } finally {
-    btn.disabled = false;
-  }
-});
 
 // ------------------------------------------------------------------ tabs --
 $("tabbar").addEventListener("click", e => {
@@ -390,8 +199,7 @@ function setTab(tab) {
   state.tab = tab;
   document.querySelectorAll("#tabbar .tab").forEach(b =>
     b.classList.toggle("is-active", b.dataset.tab === tab));
-  ["me", "house", "rank", "settings"].forEach(t =>
-    { $(`panel-${t}`).hidden = t !== tab; });
+  ["me", "house", "rank", "houses"].forEach(t => { $(`panel-${t}`).hidden = t !== tab; });
   window.scrollTo(0, 0);
   render();
 }
@@ -399,18 +207,16 @@ function setTab(tab) {
 // ----------------------------------------------------------------- render --
 function render() {
   if ($("screenMain").hidden) return;
+  const h = house();
+  if (!h) return;
 
-  const house = houseById(state.houseId);
-  const standing = houseStanding(house, state.entries, state.month);
+  const standing = houseStanding(h, state.entries, state.month);
 
   if (state.tab === "me") {
     $("panel-me").innerHTML = ui.renderMe({
-      member: state.member,
-      house, standing, month: state.month,
-      myEntries: state.entries.filter(e => e.member === state.member).slice(0, 15),
-      canDelete: true
+      member: state.member, house: h, standing, month: state.month,
+      myEntries: state.entries.filter(e => e.member === state.member).slice(0, 15)
     });
-    // Restore the category the user had selected before this re-render.
     const seg = $("catSeg");
     if (seg) seg.querySelectorAll(".seg-btn").forEach(b =>
       b.classList.toggle("is-active", b.dataset.cat === state.logCat));
@@ -423,13 +229,9 @@ function render() {
     const isPast = viewMonth !== state.month;
     const entries = isPast ? state.pastEntries : state.entries;
     $("panel-house").innerHTML = ui.renderHouse({
-      house,
-      standing: isPast ? houseStanding(house, entries, viewMonth) : standing,
-      viewMonth,
-      months: monthOptions(),
-      isPast,
-      evAbi: state.evAbi,
-      entries,
+      house: h,
+      standing: isPast ? houseStanding(h, entries, viewMonth) : standing,
+      viewMonth, months: monthOptions(), isPast, entries,
       loading: isPast && state.pastLoading
     });
   }
@@ -437,30 +239,32 @@ function render() {
   if (state.tab === "rank") {
     const records = state.standings.length
       ? state.standings
-      : [{ houseId: house.id, totals: standing.totals, qualified: standing.qualified }];
+      : [{ houseId: h.id, totals: standing.totals, qualified: standing.qualified }];
     $("panel-rank").innerHTML = ui.renderRank({
       myHouseId: state.houseId,
-      ranking: rankHouses(records),
+      ranking: rankHouses(records, state.houses),
       month: state.month,
-      history: state.history
+      history: state.history,
+      standing
     });
   }
 
-  if (state.tab === "settings" && state.evAbi) {
-    $("panel-settings").innerHTML = ui.renderSettings({ house, allEntries: state.entries });
+  if (state.tab === "houses") {
+    $("panel-houses").innerHTML = ui.renderHouses({
+      houses: state.houses, currentHouseId: state.houseId
+    });
   }
 }
 
 // ------------------------------------------------------- logging progress --
 document.addEventListener("click", e => {
   const seg = e.target.closest("#catSeg .seg-btn");
-  if (seg) {
-    state.logCat = seg.dataset.cat;
-    seg.parentElement.querySelectorAll(".seg-btn").forEach(b =>
-      b.classList.toggle("is-active", b === seg));
-    $("logHint").textContent = CATEGORIES.find(c => c.key === state.logCat).hint;
-    $("logAmount").focus();
-  }
+  if (!seg) return;
+  state.logCat = seg.dataset.cat;
+  seg.parentElement.querySelectorAll(".seg-btn").forEach(b =>
+    b.classList.toggle("is-active", b === seg));
+  $("logHint").textContent = CATEGORIES.find(c => c.key === state.logCat).hint;
+  $("logAmount").focus();
 });
 
 document.addEventListener("submit", async e => {
@@ -480,7 +284,8 @@ document.addEventListener("submit", async e => {
     });
     $("logAmount").value = "";
     $("logNote").value = "";
-    toast(`+${amount} ${CATEGORIES.find(c => c.key === state.logCat).short} logged`);
+    const cat = CATEGORIES.find(c => c.key === state.logCat);
+    celebrate(amount, memberFloor()[state.logCat], cat.short);
   } catch (err) {
     toast(err.message || "Could not save.", true);
   } finally {
@@ -491,25 +296,10 @@ document.addEventListener("submit", async e => {
 document.addEventListener("click", async e => {
   const del = e.target.closest("[data-del]");
   if (!del) return;
-
-  const id = del.dataset.del;
   const isPast = !!state.viewMonth && state.viewMonth !== state.month;
-  const entry = (isPast ? state.pastEntries : state.entries).find(x => x.id === id);
-
-  // Anyone can remove their own; an Ev Abi can remove anyone's.
-  if (entry && entry.member !== state.member && !state.evAbi) {
-    return toast("Only the Ev Abi can delete someone else's entry.", true);
-  }
-  // A closed month is Ev Abi territory, whoever the entry belongs to.
-  if (isPast && !state.evAbi) {
-    return toast("Only the Ev Abi can change a finished month.", true);
-  }
   if (!confirm("Delete this entry?")) return;
-
   try {
-    await store.deleteEntry(id);
-    // The live month re-renders off its listener; a closed month has none,
-    // so refetch and republish that month's standing by hand.
+    await store.deleteEntry(del.dataset.del);
     if (isPast) await refreshPastMonth();
     toast("Entry deleted");
   } catch (err) {
@@ -517,37 +307,119 @@ document.addEventListener("click", async e => {
   }
 });
 
-// ------------------------------------------------------- Ev Abi settings --
+// Adding to someone else, in any month, from the House tab.
 document.addEventListener("submit", async e => {
-  if (e.target.id === "housePwForm") {
-    e.preventDefault();
-    const pw = $("newHousePw").value;
-    try {
-      await store.setHousePassword(pw);
-      $("newHousePw").value = "";
-      toast("House password changed");
-    } catch (err) { toast(err.message, true); }
-  }
+  if (e.target.id !== "fixForm") return;
+  e.preventDefault();
 
-  if (e.target.id === "evAbiPwForm") {
-    e.preventDefault();
-    const pw = $("newEvAbiPw").value;
-    try {
-      await store.setEvAbiPassword(pw);
-      $("newEvAbiPw").value = "";
-      toast("Ev Abi password changed");
-    } catch (err) { toast(err.message, true); }
+  const amount = parseInt($("fixAmount").value, 10);
+  if (!Number.isFinite(amount) || amount <= 0) return toast("Enter a number above zero.", true);
+  if (amount > 10000) return toast("That looks like a typo.", true);
+
+  const month = state.viewMonth || state.month;
+  const btn = e.target.querySelector("button[type=submit]");
+  btn.disabled = true;
+  try {
+    await store.addEntry({
+      houseId: state.houseId, member: $("fixMember").value, month,
+      category: $("fixCat").value, amount, note: "added by hand"
+    });
+    $("fixAmount").value = "";
+    if (month !== state.month) await refreshPastMonth();
+    toast("Saved");
+  } catch (err) {
+    toast(err.message || "Could not save.", true);
+  } finally {
+    btn.disabled = false;
   }
 });
 
-// --------------------------------------------------------------- sign out --
-$("signOutBtn").addEventListener("click", async () => {
-  if (!confirm("Sign out of this house?")) return;
+// ---------------------------------------------------------- houses admin --
+document.addEventListener("click", e => {
+  const edit = e.target.closest("[data-edit-house]");
+  if (edit) {
+    const h = state.houses.find(x => x.id === edit.dataset.editHouse);
+    if (!h) return;
+    $("houseEditingId").value = h.id;
+    $("houseName").value = h.name || "";
+    $("houseCode").value = h.code || "";
+    $("houseAddress").value = h.address || "";
+    $("houseMembers").value = (h.members || []).join("\n");
+    $("houseFormTitle").textContent = `Edit ${h.name}`;
+    $("houseSave").textContent = "Save changes";
+    $("houseCancel").hidden = false;
+    $("houseDelete").hidden = state.houses.length <= 1;
+    $("houseName").scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+
+  if (e.target.id === "houseCancel") resetHouseForm();
+
+  if (e.target.id === "houseDelete") {
+    const id = $("houseEditingId").value;
+    if (!id) return;
+    if (!confirm("Remove this house from the list?\n\nNothing anyone logged is deleted. " +
+                 "The numbers stay in the database and come back if you add the house again."))
+      return;
+    store.removeHouse(id)
+      .then(() => { resetHouseForm(); toast("House removed from the list"); })
+      .catch(err => toast(err.message || "Could not remove.", true));
+  }
+});
+
+function resetHouseForm() {
+  const f = $("houseForm");
+  if (!f) return;
+  f.reset();
+  $("houseEditingId").value = "";
+  $("houseFormTitle").textContent = "Add a house";
+  $("houseSave").textContent = "Add house";
+  $("houseCancel").hidden = true;
+  $("houseDelete").hidden = true;
+  $("houseError").hidden = true;
+}
+
+document.addEventListener("submit", async e => {
+  if (e.target.id !== "houseForm") return;
+  e.preventDefault();
+
+  const err = $("houseError");
+  err.hidden = true;
+
+  const editingId = $("houseEditingId").value;
+  const name = $("houseName").value.trim();
+  const members = $("houseMembers").value.split("\n").map(s => s.trim()).filter(Boolean);
+  // An existing house keeps its id forever: every entry already logged points
+  // at it, and changing it would strand all of that history.
+  const id = editingId || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+  const btn = $("houseSave");
+  btn.disabled = true;
+  try {
+    await store.saveHouse({
+      id, name, members,
+      code: $("houseCode").value.trim(),
+      address: $("houseAddress").value.trim()
+    });
+    resetHouseForm();
+    toast(editingId ? "House updated" : "House added");
+  } catch (ex) {
+    err.textContent = ex.message || "Could not save the house.";
+    err.hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ------------------------------------------------------------ switch user --
+$("signOutBtn").addEventListener("click", () => {
+  if (!confirm("Switch to a different person?")) return;
   state.unsub.forEach(fn => fn());
   state.unsub = [];
-  await store.signOutSession();
+  store.clearSession();
   Object.assign(state, {
-    houseId: null, member: null, evAbi: false, entries: [], standings: [], history: [], tab: "me"
+    houseId: null, member: null, entries: [], standings: [],
+    history: [], tab: "me", viewMonth: null, pastEntries: []
   });
   lastPublished = "";
   show("screenHouse");
@@ -555,20 +427,49 @@ $("signOutBtn").addEventListener("click", async () => {
 
 // ------------------------------------------------------------------ boot --
 (async function boot() {
-  // A new calendar month? Just pick it up. Nothing to close by hand.
   state.month = monthKey();
 
   try {
-    const resumed = await store.resumeSession();
-    if (resumed && houseById(resumed.houseId)) {
-      state.houseId = resumed.houseId;
-      state.member = resumed.member;
-      state.evAbi = !!resumed.evAbi;
-      await enterApp();
+    await store.ensureSignedIn();
+  } catch (err) {
+    console.error("anonymous sign-in failed:", err);
+    toast(err.message || "Could not reach the database.", true);
+  }
+
+  let first = true;
+  store.watchHouses(async houses => {
+    state.houses = houses;
+    renderHousePicker();
+
+    if (first) {
+      first = false;
+      const saved = store.getSession();
+      if (saved && houses.some(h => h.id === saved.houseId)) {
+        state.houseId = saved.houseId;
+        state.member = saved.member;
+        await enterApp();
+        return;
+      }
+      show("screenHouse");
       return;
     }
-  } catch (err) {
-    console.error("resume failed:", err);
-  }
-  show("screenHouse");
+
+    // A house was added or edited while someone was looking at the app.
+    if (state.houseId && !houses.some(h => h.id === state.houseId)) {
+      store.clearSession();
+      state.houseId = null;
+      show("screenHouse");
+    } else {
+      render();
+    }
+  });
+
+  // If the houses listener never fires (offline, rules wrong), don't sit on
+  // the spinner forever.
+  setTimeout(() => {
+    if (!$("boot").hidden) {
+      renderHousePicker();
+      show("screenHouse");
+    }
+  }, 6000);
 })();
