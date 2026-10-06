@@ -1,17 +1,16 @@
 // ---------------------------------------------------------------------------
-// celebrate.js: a quiet moment of şükür when someone logs progress.
+// celebrate.js: an old-timey cartoon burst when someone logs progress.
 //
-// Deliberately gentle. Soft light rising rather than confetti exploding, a
-// slow halo, and a word of thanks. The bigger the amount relative to that
-// category's personal floor, the warmer and wider it gets, but it never turns
-// into fireworks.
+// Rubber-hose era silliness: radiating speed lines, tumbling stars, a big
+// squash-and-stretch pop, and a bit of film wobble. The bigger the amount
+// relative to that category's personal floor, the sillier it gets.
 // ---------------------------------------------------------------------------
 
 const TIERS = [
-  { at: 0.00, name: "calm",  word: "Elhamdülillah", motes: 14, hue: 196, rise: 0.5, halo: 1 },
-  { at: 0.25, name: "warm",  word: "Bârekallah",    motes: 22, hue: 176, rise: 0.6, halo: 1 },
-  { at: 0.50, name: "bright",word: "Mâşallah",      motes: 32, hue: 152, rise: 0.7, halo: 2 },
-  { at: 1.00, name: "gold",  word: "Mâşallah",      motes: 44, hue:  44, rise: 0.8, halo: 2 }
+  { at: 0.00, name: "calm",   word: "Elhamdülillah",  lines: 14, stars:  4, hue: 196, pop: 1 },
+  { at: 0.25, name: "warm",   word: "Bârekallah!",    lines: 22, stars:  8, hue: 176, pop: 2 },
+  { at: 0.50, name: "bright", word: "Mâşallah!",      lines: 32, stars: 14, hue: 150, pop: 3 },
+  { at: 1.00, name: "gold",   word: "MÂŞALLAH!!",     lines: 46, stars: 22, hue:  42, pop: 4 }
 ];
 
 const pick = ratio => TIERS.reduce((best, t) => (ratio >= t.at ? t : best), TIERS[0]);
@@ -21,7 +20,7 @@ let hideTimer = null;
 
 /**
  * @param amount  how much was just logged
- * @param floor   that category's personal floor, used to scale the warmth
+ * @param floor   that category's personal floor, used to scale the show
  * @param label   category name, e.g. "Books"
  */
 export function celebrate(amount, floor, label) {
@@ -38,11 +37,11 @@ export function celebrate(amount, floor, label) {
   document.getElementById("celebrateTier").textContent = tier.word;
 
   overlay.hidden = false;
-  overlay.className = `celebrate is-on tier-${tier.name}`;
+  overlay.className = `celebrate is-on tier-${tier.name} pop-${tier.pop}`;
   overlay.style.setProperty("--glow-hue", tier.hue);
 
   clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => hide(overlay), reduced ? 1100 : 1900);
+  hideTimer = setTimeout(() => hide(overlay), reduced ? 1100 : 2200);
   if (reduced) return;
 
   const ctx = canvas.getContext("2d");
@@ -53,71 +52,115 @@ export function celebrate(amount, floor, label) {
   canvas.style.height = innerHeight + "px";
 
   const cx = w / 2, cy = h / 2;
+  const reach = Math.hypot(w, h) * 0.55;
 
-  // Light motes drifting upward, like dust in a shaft of light.
-  const motes = Array.from({ length: tier.motes }, () => ({
-    x: cx + (Math.random() - 0.5) * innerWidth * 0.55 * dpr,
-    y: cy + (Math.random() * 0.45 + 0.1) * innerHeight * dpr,
-    r: (1.2 + Math.random() * 2.6) * dpr,
-    vy: -(tier.rise + Math.random() * 0.7) * dpr,
-    drift: (Math.random() - 0.5) * 0.35 * dpr,
-    life: 0,                       // fades in, then out
-    ttl: 60 + Math.random() * 50,
-    hue: tier.hue + (Math.random() * 30 - 15)
-  }));
+  // Classic cartoon impact lines: tapered spokes that shoot out and thin away.
+  const lines = Array.from({ length: tier.lines }, (_, i) => {
+    const jitter = (Math.random() - 0.5) * 0.25;
+    return {
+      angle: (Math.PI * 2 * i) / tier.lines + jitter,
+      inner: 40 * dpr,
+      len: (90 + Math.random() * 150) * dpr,
+      speed: (16 + Math.random() * 16) * dpr,
+      width: (3 + Math.random() * 7) * dpr,
+      life: 1
+    };
+  });
 
-  const halos = Array.from({ length: tier.halo }, (_, i) => ({
-    r: 10 * dpr, life: 1, delay: i * 14
-  }));
+  // Tumbling stars, flung out with a bit of gravity so they arc like gags.
+  const stars = Array.from({ length: tier.stars }, () => {
+    const a = Math.random() * Math.PI * 2;
+    const sp = (7 + Math.random() * 11) * dpr;
+    return {
+      x: cx, y: cy,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp - 5 * dpr,
+      r: (9 + Math.random() * 13) * dpr,
+      rot: Math.random() * Math.PI,
+      spin: (Math.random() - 0.5) * 0.42,
+      hue: tier.hue + (Math.random() * 46 - 23),
+      life: 1
+    };
+  });
 
-  let frame = 0;
+  // One fat expanding ring, the cartoon "impact" ripple.
+  const ring = { r: 20 * dpr, life: 1 };
+
   cancelAnimationFrame(raf);
 
   (function draw() {
     ctx.clearRect(0, 0, w, h);
-    frame++;
 
-    // Slow halo, barely there.
-    for (const halo of halos) {
-      if (frame < halo.delay) continue;
-      halo.r += 2.6 * dpr;
-      halo.life -= 0.013;
-      if (halo.life <= 0) continue;
+    if (ring.life > 0) {
+      ring.r += 26 * dpr;
+      ring.life -= 0.045;
       ctx.beginPath();
-      ctx.arc(cx, cy, halo.r, 0, Math.PI * 2);
-      ctx.strokeStyle = `hsla(${tier.hue}, 70%, 65%, ${halo.life * 0.28})`;
-      ctx.lineWidth = 1.6 * dpr;
+      ctx.arc(cx, cy, ring.r, 0, Math.PI * 2);
+      ctx.strokeStyle = `hsla(${tier.hue}, 90%, 55%, ${ring.life * 0.7})`;
+      ctx.lineWidth = 9 * dpr * ring.life;
       ctx.stroke();
     }
 
-    let alive = false;
-    for (const m of motes) {
-      m.life++;
-      if (m.life > m.ttl) continue;
+    let alive = ring.life > 0;
+
+    for (const L of lines) {
+      if (L.life <= 0) continue;
       alive = true;
-      m.y += m.vy;
-      m.x += m.drift;
+      L.inner += L.speed;
+      L.life -= 0.034;
+      if (L.inner > reach) { L.life = 0; continue; }
 
-      // Ease in for the first third, out for the last third.
-      const t = m.life / m.ttl;
-      const alpha = t < 0.3 ? t / 0.3 : (t > 0.7 ? (1 - t) / 0.3 : 1);
+      const x1 = cx + Math.cos(L.angle) * L.inner;
+      const y1 = cy + Math.sin(L.angle) * L.inner;
+      const x2 = cx + Math.cos(L.angle) * (L.inner + L.len);
+      const y2 = cy + Math.sin(L.angle) * (L.inner + L.len);
 
-      const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r * 3);
-      g.addColorStop(0, `hsla(${m.hue}, 85%, 72%, ${alpha * 0.85})`);
-      g.addColorStop(1, `hsla(${m.hue}, 85%, 72%, 0)`);
-      ctx.fillStyle = g;
+      ctx.strokeStyle = `hsla(${tier.hue}, 95%, 52%, ${Math.max(0, L.life) * 0.8})`;
+      ctx.lineWidth = L.width * Math.max(0, L.life);
+      ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.arc(m.x, m.y, m.r * 3, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
     }
 
-    if (alive || halos.some(x => x.life > 0)) {
-      raf = requestAnimationFrame(draw);
-    } else {
-      ctx.clearRect(0, 0, w, h);
-      hide(overlay);
+    for (const s of stars) {
+      if (s.life <= 0) continue;
+      alive = true;
+      s.x += s.vx;
+      s.y += s.vy;
+      s.vy += 0.42 * dpr;        // gravity, so they arc and drop
+      s.vx *= 0.99;
+      s.rot += s.spin;
+      s.life -= 0.016;
+
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.rot);
+      ctx.fillStyle = `hsla(${s.hue}, 95%, 58%, ${Math.max(0, s.life)})`;
+      ctx.strokeStyle = `hsla(${s.hue}, 90%, 28%, ${Math.max(0, s.life) * 0.8})`;
+      ctx.lineWidth = 2 * dpr;
+      star(ctx, s.r);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
     }
+
+    if (alive) raf = requestAnimationFrame(draw);
+    else { ctx.clearRect(0, 0, w, h); hide(overlay); }
   })();
+}
+
+/** Five-pointed star centred on the current transform origin. */
+function star(ctx, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 === 0 ? r : r * 0.45;
+    const a = (Math.PI / 5) * i - Math.PI / 2;
+    const x = Math.cos(a) * rad, y = Math.sin(a) * rad;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.closePath();
 }
 
 function hide(overlay) {
