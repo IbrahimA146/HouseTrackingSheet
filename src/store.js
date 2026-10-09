@@ -102,14 +102,60 @@ export function clearSession() {
 export async function ensureSignedIn() {
   if (isDemo) return;
   const f = await loadFirebase();
-  if (f.auth.currentUser) return;
   try {
     await f.setPersistence(f.auth, f.browserLocalPersistence);
+
+    // On a reload, auth.currentUser is null for a moment while Firebase
+    // restores the saved session. Checking it directly raced that restore and
+    // minted a brand new anonymous user, which meant listeners could attach
+    // before any token existed and come back empty. Wait for the first
+    // auth-state callback instead; it is the point where the answer is real.
+    const existing = await new Promise(resolve => {
+      const stop = f.onAuthStateChanged(f.auth, u => { stop(); resolve(u); });
+    });
+    if (existing) return;
+
     await f.signInAnonymously(f.auth);
   } catch (err) {
     throw new StoreError(err.code, AUTH_MESSAGES[err.code] ||
       "Could not reach the database. Check your connection.");
   }
+}
+
+/**
+ * onSnapshot dies permanently on its first error, which is how a brief
+ * permission blip turned into "everything reads zero until I refresh". This
+ * reattaches with a backoff instead.
+ */
+function liveQuery(label, build, cb) {
+  let stop = () => {};
+  let cancelled = false;
+  let attempt = 0;
+
+  const attach = async () => {
+    if (cancelled) return;
+    try {
+      const f = await loadFirebase();
+      await ensureSignedIn();
+      if (cancelled) return;
+      stop = f.onSnapshot(build(f), snap => {
+        attempt = 0;
+        cb(snap, { fromCache: snap.metadata.fromCache });
+      }, err => {
+        console.error(label + " listener:", err);
+        if (cancelled) return;
+        const wait = Math.min(1000 * 2 ** attempt++, 15000);
+        setTimeout(attach, wait);
+      });
+    } catch (err) {
+      console.error(label + " attach:", err);
+      if (cancelled) return;
+      setTimeout(attach, Math.min(1000 * 2 ** attempt++, 15000));
+    }
+  };
+  attach();
+
+  return () => { cancelled = true; stop(); };
 }
 
 // ===========================================================================
@@ -123,22 +169,20 @@ export function watchHouses(cb) {
     return () => demo.listeners.delete(emit);
   }
 
-  let stop = () => {};
-  let cancelled = false;
-  loadFirebase().then(f => {
-    if (cancelled) return;
-    stop = f.onSnapshot(f.collection(f.db, "houses"), async snap => {
+  return liveQuery("houses",
+    f => f.collection(f.db, "houses"),
+    async (snap, meta) => {
       if (snap.empty) {
-        // First run against a database that predates the houses collection.
-        // Seeding is additive: it never touches entries that already exist.
-        await seedFirstHouse().catch(err => console.error("seed failed:", err));
+        // Only seed on a real answer from the server. An empty cache on a cold
+        // load is not evidence that there are no houses.
+        if (!meta.fromCache) {
+          await seedFirstHouse().catch(err => console.error("seed failed:", err));
+        }
         return;
       }
       cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))
                   .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)));
-    }, err => console.error("houses listener:", err));
-  });
-  return () => { cancelled = true; stop(); };
+    });
 }
 
 async function seedFirstHouse() {
@@ -198,29 +242,23 @@ export async function removeHouse(id) {
 // ===========================================================================
 export function watchHouseEntries(houseId, month, cb) {
   if (isDemo) {
-    const emit = () => cb(demo.entries.filter(e => e.houseId === houseId && e.month === month));
+    const emit = () => cb(demo.entries.filter(e => e.houseId === houseId && e.month === month),
+                          { fromCache: false });
     demo.listeners.add(emit);
     emit();
     return () => demo.listeners.delete(emit);
   }
 
-  let stop = () => {};
-  let cancelled = false;
-  loadFirebase().then(f => {
-    if (cancelled) return;
-    const q = f.query(
+  return liveQuery("entries",
+    f => f.query(
       f.collection(f.db, "entries"),
       f.where("houseId", "==", houseId),
       f.where("month", "==", month)
-    );
-    stop = f.onSnapshot(q, snap => {
-      cb(snap.docs.map(d => ({
-        id: d.id, ...d.data(),
-        createdAt: d.data().createdAt?.toMillis?.() ?? Date.now()
-      })));
-    }, err => console.error("entries listener:", err));
-  });
-  return () => { cancelled = true; stop(); };
+    ),
+    (snap, meta) => cb(snap.docs.map(d => ({
+      id: d.id, ...d.data(),
+      createdAt: d.data().createdAt?.toMillis?.() ?? Date.now()
+    })), meta));
 }
 
 /** One-shot read of a month that has already closed. */
@@ -294,15 +332,9 @@ export function watchStandings(month, cb) {
     return () => demo.listeners.delete(emit);
   }
 
-  let stop = () => {};
-  let cancelled = false;
-  loadFirebase().then(f => {
-    if (cancelled) return;
-    const q = f.query(f.collection(f.db, "standings"), f.where("month", "==", month));
-    stop = f.onSnapshot(q, snap => cb(snap.docs.map(d => d.data())),
-      err => console.error("standings listener:", err));
-  });
-  return () => { cancelled = true; stop(); };
+  return liveQuery("standings",
+    f => f.query(f.collection(f.db, "standings"), f.where("month", "==", month)),
+    snap => cb(snap.docs.map(d => d.data())));
 }
 
 /** Every month ever recorded, newest first, in one query. */

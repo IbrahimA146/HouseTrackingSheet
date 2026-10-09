@@ -92,6 +92,10 @@ p  { margin: 0; }
   animation: spin .7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+.spinner-sm {
+  width: 18px; height: 18px; border-width: 2px;
+  display: inline-block; vertical-align: middle; margin-bottom: 8px;
+}
 
 /* ------------------------------------------------------------- buttons -- */
 .btn {
@@ -522,16 +526,16 @@ input:focus { outline: 2.5px solid var(--accent); outline-offset: -1px; border-c
 }
 
 .celebrate-core {
-  position: relative; text-align: center;
+  position: relative; z-index: 2; text-align: center;
   padding: 24px 38px; border-radius: 20px;
   background: var(--surface);
   border: 4px solid hsl(var(--glow-hue, 196), 55%, 30%);
   box-shadow: 7px 7px 0 hsla(var(--glow-hue, 196), 60%, 25%, .9),
               0 20px 50px -14px hsla(var(--glow-hue, 196), 70%, 40%, .5);
-  animation: toon-pop .72s cubic-bezier(.18,1.5,.36,1) both;
+  animation: toon-pop-big .95s cubic-bezier(.18,1.5,.36,1) both;
 }
 .celebrate-amount {
-  font-size: 3.1rem; font-weight: 700; letter-spacing: -.035em; line-height: 1;
+  font-size: 3.7rem; font-weight: 700; letter-spacing: -.035em; line-height: 1;
   color: hsl(var(--glow-hue, 196), 70%, 38%);
   text-shadow: 3px 3px 0 hsla(var(--glow-hue, 196), 60%, 82%, .9);
   animation: toon-squash .62s cubic-bezier(.2,1.8,.3,1) both .04s;
@@ -545,19 +549,10 @@ input:focus { outline: 2.5px solid var(--accent); outline-offset: -1px; border-c
   letter-spacing: .14em; color: var(--text-dim); margin-top: 7px;
 }
 .celebrate-tier {
-  margin-top: 13px; font-size: 1.3rem; font-weight: 700;
+  margin-top: 13px; font-size: 1.55rem; font-weight: 700;
   color: var(--text); letter-spacing: -.01em;
   animation: toon-wobble .9s ease-in-out both .22s;
 }
-
-/* The bigger the log, the harder everything bounces. */
-.pop-1 .celebrate-core { animation-duration: .6s; }
-.pop-2 .celebrate-core { animation-duration: .72s; }
-.pop-3 .celebrate-core { animation-duration: .85s; }
-.pop-4 .celebrate-core { animation-duration: 1s; }
-.pop-3 .celebrate-amount, .pop-4 .celebrate-amount { font-size: 3.8rem; }
-.pop-4 .celebrate-tier { font-size: 1.6rem; }
-.pop-3 .celebrate-core, .pop-4 .celebrate-core { animation-name: toon-pop-big; }
 
 @keyframes toon-pop {
   0%   { opacity: 0; transform: scale(.2) rotate(-12deg); }
@@ -594,13 +589,39 @@ input:focus { outline: 2.5px solid var(--accent); outline-offset: -1px; border-c
 }
 
 .celebrate:not(.is-on) { opacity: 0; }
-.celebrate.is-on { animation: celebrate-fade 2.2s ease forwards; }
+.celebrate.is-on { animation: celebrate-fade 2.8s ease forwards; }
 @keyframes celebrate-fade {
-  0%, 70% { opacity: 1; }
+  0%, 78% { opacity: 1; }
   100%    { opacity: 0; }
 }
 
+/* Compliments thrown all over the screen, one per log. */
+.celebrate-words { position: absolute; inset: 0; z-index: 1; overflow: hidden; }
+.cword {
+  position: absolute;
+  font-weight: 700; font-size: 1.5rem; white-space: nowrap;
+  color: hsl(var(--hue, 42), 85%, 42%);
+  text-shadow: 2px 2px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
+}
+:root[data-theme="dark"] .cword {
+  color: hsl(var(--hue, 42), 90%, 68%);
+  text-shadow: 2px 2px 0 #0d1a22, -1px -1px 0 #0d1a22, 1px -1px 0 #0d1a22, -1px 1px 0 #0d1a22;
+}
+.cword-in {
+  display: inline-block;
+  animation: cword-pop 1.5s cubic-bezier(.2,1.7,.3,1) both;
+}
+@keyframes cword-pop {
+  0%   { opacity: 0; transform: scale(0)    translateY(26px); }
+  22%  { opacity: 1; transform: scale(1.28) translateY(0); }
+  38%  {             transform: scale(1)    translateY(0); }
+  72%  { opacity: 1; transform: scale(1)    translateY(-10px); }
+  100% { opacity: 0; transform: scale(.92)  translateY(-40px); }
+}
+@media (max-width: 719px) { .cword { font-size: 1.1rem; } }
+
 @media (prefers-reduced-motion: reduce) {
+  .cword-in,
   .celebrate::after,
   .celebrate-core,
   .celebrate-amount,

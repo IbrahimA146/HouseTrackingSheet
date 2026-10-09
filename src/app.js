@@ -27,6 +27,9 @@ const state = {
   viewMonth: null,
   pastEntries: [],
   pastLoading: false,
+  // False until the server (not the local cache) has answered. Showing zeros
+  // before then is what made it look like everyone's work had vanished.
+  synced: false,
   unsub: []
 };
 
@@ -116,9 +119,16 @@ async function enterApp() {
   state.unsub.forEach(fn => fn());
   state.unsub = [];
 
-  state.unsub.push(store.watchHouseEntries(state.houseId, state.month, entries => {
+  state.synced = false;
+  state.unsub.push(store.watchHouseEntries(state.houseId, state.month, (entries, meta) => {
     state.entries = entries.sort((a, b) => b.createdAt - a.createdAt);
-    publishOurTotals();
+    // An empty result straight from the cache means "we don't know yet", not
+    // "there is nothing". Don't trust it, and above all don't publish it.
+    const trustworthy = !meta.fromCache || entries.length > 0;
+    if (trustworthy) {
+      state.synced = true;
+      publishOurTotals();
+    }
     render();
   }));
 
@@ -133,7 +143,7 @@ async function enterApp() {
 let lastPublished = "";
 function publishOurTotals() {
   const h = house();
-  if (!h) return;
+  if (!h || !state.synced) return;   // never overwrite real totals with zeros
   const standing = houseStanding(h, state.entries, state.month);
   const fingerprint = JSON.stringify([standing.totals, standing.qualified]);
   if (fingerprint === lastPublished) return;
@@ -209,6 +219,20 @@ function render() {
   if ($("screenMain").hidden) return;
   const h = house();
   if (!h) return;
+
+  // Still waiting on the first real answer, and nothing cached to show.
+  if (!state.synced && state.entries.length === 0) {
+    const waiting = `<section class="card"><p class="empty">
+      <span class="spinner spinner-sm"></span><br>Loading this month&rsquo;s numbers…
+    </p></section>`;
+    ["me", "house", "rank"].forEach(t => { $(`panel-${t}`).innerHTML = waiting; });
+    if (state.tab === "houses") {
+      $("panel-houses").innerHTML = ui.renderHouses({
+        houses: state.houses, currentHouseId: state.houseId
+      });
+    }
+    return;
+  }
 
   const standing = houseStanding(h, state.entries, state.month);
 
@@ -419,7 +443,7 @@ $("signOutBtn").addEventListener("click", () => {
   store.clearSession();
   Object.assign(state, {
     houseId: null, member: null, entries: [], standings: [],
-    history: [], tab: "me", viewMonth: null, pastEntries: []
+    history: [], tab: "me", viewMonth: null, pastEntries: [], synced: false
   });
   lastPublished = "";
   show("screenHouse");
